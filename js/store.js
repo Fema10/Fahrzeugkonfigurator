@@ -120,6 +120,8 @@
     /* ---------- Artikelstamm (APplus-Tabelle ARTIKEL, Feld ARTIKEL) ---------- */
     artikel: new Map(), artikelQuelle: null,
     artikelSetzen(rows, quelle) {
+      // Bildspalte: Adresse oder HTML wie <img src="…">; Backslashes im Pfad werden zu /
+      const bildAus = v => { let t = String(v || "").trim(); if (!t) return ""; const m = t.match(/src\s*=\s*["']([^"']+)["']/i); if (m) t = m[1]; return t.replace(/\\/g, "/"); };
       const sp = (K.cfg && K.cfg.artikelSpalten) || {}, map = new Map();
       const norm = s => String(s).toUpperCase().replace(/[^A-Z0-9]/g, "");
       for (const r of Array.isArray(rows) ? rows : []) {
@@ -128,7 +130,7 @@
         const code = String(f("code", ["code", "artikel"])).trim(); if (!code) continue;
         // Leere oder fehlende Spalte = kein Wert (null), damit z. B. eine Abfrage nur mit ARTIKEL und NAME keine Preise auf 0 setzt
         const zahl = v => v === "" || v == null ? null : typeof v === "number" ? v : (K.X ? K.X.zahl(v) : parseFloat(String(v).replace(",", ".")) || 0);
-        map.set(code.toUpperCase(), { code, name: String(f("name", ["name"])).trim(), preis: zahl(f("preis", ["preis"])), kosten: zahl(f("kosten", ["kosten"])), me: String(f("me", ["me"])).trim(), gruppe: String(f("gruppe", ["gruppe"])).trim() });
+        map.set(code.toUpperCase(), { code, name: String(f("name", ["name"])).trim(), preis: zahl(f("preis", ["preis"])), kosten: zahl(f("kosten", ["kosten"])), me: String(f("me", ["me"])).trim(), gruppe: String(f("gruppe", ["gruppe"])).trim(), bild: bildAus(f("bild", ["bild"])) });
       }
       this.artikel = map; this.artikelQuelle = map.size ? quelle : null;
     },

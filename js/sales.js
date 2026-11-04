@@ -90,7 +90,13 @@
   const nachfahren = (mo, gid) => { const out = [gid]; for (const k of kinder(mo, gid)) out.push(...nachfahren(mo, k.id)); return out; };
   const pfad = (mo, gid) => { const out = []; let g = mo.gruppen.find(x => x.id === gid); while (g) { out.unshift(g); g = mo.gruppen.find(x => x.id === g.eltern); } return out; };
   K.bildUrl = id => id ? "/_blob/" + id : null;
-  const produktBild = (p, farbe) => p.bild ? `<img src="${K.bildUrl(p.bild)}" alt="" loading="lazy">` : K.silhouette(p.visual?.typ, farbe || "var(--ink)");
+  /** Bild aus dem Artikelstamm (Spalte BILD/DOCUMENTS der Artikel-Abfrage) */
+  K.artikelBild = code => (code && K.Store.artikelZu(code)?.bild) || "";
+  /** Bild mit Ersatz: lädt das Bild nicht, erscheint die Grafik */
+  K.bildMitErsatz = (url, ersatz) => `<img src="${esc(url)}" alt="" loading="lazy" data-ersatz="${esc(ersatz)}">`;
+  K.produktBildHtml = (p, farbe) => { const ers = K.silhouette(p.visual?.typ, farbe || "var(--ink)"); if (p.bild) return `<img src="${K.bildUrl(p.bild)}" alt="" loading="lazy">`; const a = K.artikelBild(p.code); return a ? K.bildMitErsatz(a, ers) : ers; };
+  const produktBild = (p, farbe) => K.produktBildHtml(p, farbe);
+  document.addEventListener("error", e => { const t = e.target; if (t && t.tagName === "IMG" && t.dataset && t.dataset.ersatz != null && t.parentNode) { const d = document.createElement("span"); d.innerHTML = t.dataset.ersatz; t.replaceWith(...d.childNodes); } }, true);
   function gruppenBild(mo, g) {
     if (g.bild) return `<img src="${K.bildUrl(g.bild)}" alt="">`;
     const p = mo.produkte.find(x => nachfahren(mo, g.id).includes(x.gruppe));
@@ -163,6 +169,7 @@
   /* Vorschaubild eines Werts: hochgeladenes Bild, Farbfeld oder schematische Grafik */
   K.wertGrafik = (m, w, i, p) => {
     if (w.bild) return `<img src="${K.bildUrl(w.bild)}" alt="" loading="lazy">`;
+    const ab = !w.hex && K.artikelBild(w.code); if (ab) return K.bildMitErsatz(ab, K.wertGrafik(m, Object.assign({}, w, { code: "" }), i, p));
     if (w.hex) return `<span class="farbkachel" style="background:${esc(w.hex)}"></span>`;
     const farben = ["#2E9E5B", "#1F3F9A", "#B23AC4", "#C8312B", "#2BB3A5", "#8A5A2B", "#D98C00", "#56606B"];
     const f = farben[i % farben.length], typ = p?.visual?.typ || "semi";

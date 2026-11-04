@@ -3260,7 +3260,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
         async (einst) => "AN-2026-01234"  – hat Vorrang vor der Abfrage. */
     angebotsnummer: null,
     /** Spalten der Artikel-Abfrage (Tabelle ARTIKEL). Erste vorhandene Spalte gewinnt, Groß/Klein egal. */
-    artikelSpalten: { code: ["ARTIKEL"], name: ["NAME", "BEZEICHNUNG", "ARTIKELBEZEICHNUNG", "BEZ", "TEXT", "KURZTEXT"], preis: ["VKPREIS", "VK_PREIS", "LISTENPREIS", "PREIS", "NETTO", "NETTOPREIS"], kosten: ["HERSTELLKOSTEN", "KOSTEN", "EKPREIS", "EK_PREIS", "SELBSTKOSTEN"], me: ["ME", "MENGENEINHEIT", "EINHEIT"], gruppe: ["ARTIKELGRUPPE", "WARENGRUPPE", "GRUPPE"] },
+    artikelSpalten: { code: ["ARTIKEL"], bild: ["BILD", "BILDURL", "DOCUMENTS", "IMAGE", "FOTO"], name: ["NAME", "BEZEICHNUNG", "ARTIKELBEZEICHNUNG", "BEZ", "TEXT", "KURZTEXT"], preis: ["VKPREIS", "VK_PREIS", "LISTENPREIS", "PREIS", "NETTO", "NETTOPREIS"], kosten: ["HERSTELLKOSTEN", "KOSTEN", "EKPREIS", "EK_PREIS", "SELBSTKOSTEN"], me: ["ME", "MENGENEINHEIT", "EINHEIT"], gruppe: ["ARTIKELGRUPPE", "WARENGRUPPE", "GRUPPE"] },
     loadQuery: async function (name) {
       if (!name || location.protocol === "file:") return null;
       const app = location.pathname.split("/").slice(0, 2).join("/");
@@ -4009,6 +4009,8 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     /* ---------- Artikelstamm (APplus-Tabelle ARTIKEL, Feld ARTIKEL) ---------- */
     artikel: new Map(), artikelQuelle: null,
     artikelSetzen(rows, quelle) {
+      // Bildspalte: Adresse oder HTML wie <img src="…">; Backslashes im Pfad werden zu /
+      const bildAus = v => { let t = String(v || "").trim(); if (!t) return ""; const m = t.match(/src\s*=\s*["']([^"']+)["']/i); if (m) t = m[1]; return t.replace(/\\/g, "/"); };
       const sp = (K.cfg && K.cfg.artikelSpalten) || {}, map = new Map();
       const norm = s => String(s).toUpperCase().replace(/[^A-Z0-9]/g, "");
       for (const r of Array.isArray(rows) ? rows : []) {
@@ -4017,7 +4019,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
         const code = String(f("code", ["code", "artikel"])).trim(); if (!code) continue;
         // Leere oder fehlende Spalte = kein Wert (null), damit z. B. eine Abfrage nur mit ARTIKEL und NAME keine Preise auf 0 setzt
         const zahl = v => v === "" || v == null ? null : typeof v === "number" ? v : (K.X ? K.X.zahl(v) : parseFloat(String(v).replace(",", ".")) || 0);
-        map.set(code.toUpperCase(), { code, name: String(f("name", ["name"])).trim(), preis: zahl(f("preis", ["preis"])), kosten: zahl(f("kosten", ["kosten"])), me: String(f("me", ["me"])).trim(), gruppe: String(f("gruppe", ["gruppe"])).trim() });
+        map.set(code.toUpperCase(), { code, name: String(f("name", ["name"])).trim(), preis: zahl(f("preis", ["preis"])), kosten: zahl(f("kosten", ["kosten"])), me: String(f("me", ["me"])).trim(), gruppe: String(f("gruppe", ["gruppe"])).trim(), bild: bildAus(f("bild", ["bild"])) });
       }
       this.artikel = map; this.artikelQuelle = map.size ? quelle : null;
     },
@@ -4810,7 +4812,13 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
   const nachfahren = (mo, gid) => { const out = [gid]; for (const k of kinder(mo, gid)) out.push(...nachfahren(mo, k.id)); return out; };
   const pfad = (mo, gid) => { const out = []; let g = mo.gruppen.find(x => x.id === gid); while (g) { out.unshift(g); g = mo.gruppen.find(x => x.id === g.eltern); } return out; };
   K.bildUrl = id => id ? "/_blob/" + id : null;
-  const produktBild = (p, farbe) => p.bild ? `<img src="${K.bildUrl(p.bild)}" alt="" loading="lazy">` : K.silhouette(p.visual?.typ, farbe || "var(--ink)");
+  /** Bild aus dem Artikelstamm (Spalte BILD/DOCUMENTS der Artikel-Abfrage) */
+  K.artikelBild = code => (code && K.Store.artikelZu(code)?.bild) || "";
+  /** Bild mit Ersatz: lädt das Bild nicht, erscheint die Grafik */
+  K.bildMitErsatz = (url, ersatz) => `<img src="${esc(url)}" alt="" loading="lazy" data-ersatz="${esc(ersatz)}">`;
+  K.produktBildHtml = (p, farbe) => { const ers = K.silhouette(p.visual?.typ, farbe || "var(--ink)"); if (p.bild) return `<img src="${K.bildUrl(p.bild)}" alt="" loading="lazy">`; const a = K.artikelBild(p.code); return a ? K.bildMitErsatz(a, ers) : ers; };
+  const produktBild = (p, farbe) => K.produktBildHtml(p, farbe);
+  document.addEventListener("error", e => { const t = e.target; if (t && t.tagName === "IMG" && t.dataset && t.dataset.ersatz != null && t.parentNode) { const d = document.createElement("span"); d.innerHTML = t.dataset.ersatz; t.replaceWith(...d.childNodes); } }, true);
   function gruppenBild(mo, g) {
     if (g.bild) return `<img src="${K.bildUrl(g.bild)}" alt="">`;
     const p = mo.produkte.find(x => nachfahren(mo, g.id).includes(x.gruppe));
@@ -4883,6 +4891,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
   /* Vorschaubild eines Werts: hochgeladenes Bild, Farbfeld oder schematische Grafik */
   K.wertGrafik = (m, w, i, p) => {
     if (w.bild) return `<img src="${K.bildUrl(w.bild)}" alt="" loading="lazy">`;
+    const ab = !w.hex && K.artikelBild(w.code); if (ab) return K.bildMitErsatz(ab, K.wertGrafik(m, Object.assign({}, w, { code: "" }), i, p));
     if (w.hex) return `<span class="farbkachel" style="background:${esc(w.hex)}"></span>`;
     const farben = ["#2E9E5B", "#1F3F9A", "#B23AC4", "#C8312B", "#2BB3A5", "#8A5A2B", "#D98C00", "#56606B"];
     const f = farben[i % farben.length], typ = p?.visual?.typ || "semi";
@@ -8425,7 +8434,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
 
   /* ---------- Bilder (in APplus ohne Dateiablage: verkleinert im Modell) ---------- */
   const alteBildUrl = K.bildUrl;
-  K.bildUrl = id => id && String(id).startsWith("data:") ? id : alteBildUrl(id);
+  K.bildUrl = id => !id ? null : /^(data:|blob:|https?:|\/\/|\.{0,2}\/)/i.test(String(id)) || /[\/.]/.test(String(id)) ? String(id) : alteBildUrl(id);
   async function bildLesen(el) {
     if (el.dataset.weg) return null;
     if (K.assets) return St().bildHochladen(el);
@@ -8489,7 +8498,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
       <div class="feld"><label for="kb-gbes">Beschreibung</label><textarea id="kb-gbes" rows="2" data-chg="kbGBes" ${St().dis()}>${esc(g.beschreibung || "")}</textarea></div>
       <h3>Inhalt</h3>
       ${ks.length || fs.length ? `<div class="kb-kacheln">${ks.map(k => `<button type="button" class="kb-kachel fam" data-act="kbWahl" data-s="g:${k.id}"><span>▤</span><b>${esc(k.name)}</b><small>${E.familienArtikel(mo, k.id).length} Fahrzeuge</small></button>`).join("")}
-        ${fs.map(p => `<button type="button" class="kb-kachel" data-act="kbWahl" data-s="p:${p.id}"><span class="kb-silh">${p.bild ? `<img src="${K.bildUrl(p.bild)}" alt="">` : K.silhouette(p.visual?.typ, "var(--ink)")}</span><b>${esc(p.name)}</b><small><code>${esc(p.code || "")}</code> · ${codesVon(p)} Codes</small></button>`).join("")}</div>` : ""}
+        ${fs.map(p => `<button type="button" class="kb-kachel" data-act="kbWahl" data-s="p:${p.id}"><span class="kb-silh">${K.produktBildHtml(p, "var(--ink)")}</span><b>${esc(p.name)}</b><small><code>${esc(p.code || "")}</code> · ${codesVon(p)} Codes</small></button>`).join("")}</div>` : ""}
       <div class="kb-ablage">Fahrzeuge aus dem Artikelstamm hierher ziehen<br><span class="gedimmt klein">oder rechts ankreuzen und „Als Fahrzeuge hinzufügen“</span></div>
       ${famStruktur(mo, g)}</div>`;
   }
@@ -8559,7 +8568,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
   function treffer(mo, q) {
     q = q.trim(); if (!q) return [];
     const out = [], gesehen = new Set(), ql = q.toLowerCase();
-    if (K.Store.artikelQuelle) for (const a of K.Store.artikelSuche(q, 40)) { const C = norm(a.code); if (gesehen.has(C)) continue; gesehen.add(C); out.push({ code: a.code, name: a.name, preis: a.preis }); }
+    if (K.Store.artikelQuelle) for (const a of K.Store.artikelSuche(q, 40)) { const C = norm(a.code); if (gesehen.has(C)) continue; gesehen.add(C); out.push({ code: a.code, name: a.name, preis: a.preis, bild: a.bild }); }
     // Codes aus dem Modell nur, wenn kein echter Artikelstamm (APplus oder Excel) geladen ist
     if (!K.Store.artikelQuelle || K.Store.artikelQuelle === "beispiel") for (const m of mo.merkmale) for (const w of m.werte) { if (!w.code || out.length >= 40) continue; const C = norm(w.code); if (gesehen.has(C) || !(w.code + " " + w.name).toLowerCase().includes(ql)) continue; gesehen.add(C); out.push({ code: w.code, name: w.name, preis: w.preis, gruppe: m.name }); }
     const vorn = out.filter(x => x.code.toLowerCase().startsWith(ql)); return [...vorn, ...out.filter(x => !vorn.includes(x))].slice(0, 40);
@@ -8584,7 +8593,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
         <input id="kb-psuche" type="search" data-in="kbPSuche" role="combobox" aria-autocomplete="list" aria-expanded="${!!liste.length}" aria-controls="kb-ac-liste" ${liste.length ? `aria-activedescendant="kb-ac-${kb.acIdx || 0}"` : ""} aria-label="Artikel suchen" placeholder="Artikelnummer oder Bezeichnung" value="${esc(q)}" autocomplete="off">
         ${q.trim() ? (liste.length ? `<ul id="kb-ac-liste" class="kb-ac-liste" role="listbox">${liste.map((a, i) => { const da = vorhanden.has(norm(a.code)), nz = nutzung.get(norm(a.code));
           return `<li id="kb-ac-${i}" role="option" aria-selected="${i === (kb.acIdx || 0)}" class="${da ? "da" : ""}" draggable="${!ro()}" data-drag="a:${esc(a.code)}" data-act="kbAcZeile" data-i="${i}">
-            <span class="kb-ac-text"><code>${esc(a.code)}</code> <span>${esc(a.name || "")}</span>${a.gruppe ? ` <i class="gedimmt">${esc(a.gruppe)}</i>` : ""}</span>
+            <span class="kb-ac-text">${a.bild ? `<span class="kb-ac-bild">${K.bildMitErsatz(a.bild, "")}</span>` : ""}<code>${esc(a.code)}</code> <span>${esc(a.name || "")}</span>${a.gruppe ? ` <i class="gedimmt">${esc(a.gruppe)}</i>` : ""}</span>
             <span class="kb-ac-info">${da ? `<span class="kb-nutz">schon drin</span>` : nz ? `<span class="kb-nutz" title="${nz === "Fahrzeug" ? "ist ein Fahrzeug im Katalog" : "als Code in " + nz + " Fahrzeugen"}">${nz === "Fahrzeug" ? "Fzg." : "×" + nz}</span>` : ""}<span class="num klein">${a.preis ? K.eur(a.preis) : ""}</span></span>
             ${ziel && !da ? `<span class="kb-ac-knopf">${istFam ? `<button type="button" class="btn klein ghost" data-act="kbAlsFz" data-c="${esc(a.code)}" title="Als Fahrzeug in dieser Familie anlegen">als Fahrzeug</button>` : ""}<button type="button" class="btn klein primary" data-act="kbUebernehmen" data-c="${esc(a.code)}">Übernehmen</button></span>` : ""}</li>`; }).join("")}</ul>`
           : `<p class="kb-ac-leer klein">Kein Artikel gefunden.</p>`) : ""}

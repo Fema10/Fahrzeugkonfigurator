@@ -20,7 +20,7 @@
         async (einst) => "AN-2026-01234"  – hat Vorrang vor der Abfrage. */
     angebotsnummer: null,
     /** Spalten der Artikel-Abfrage (Tabelle ARTIKEL). Erste vorhandene Spalte gewinnt, Groß/Klein egal. */
-    artikelSpalten: { code: ["ARTIKEL"], name: ["NAME", "BEZEICHNUNG", "ARTIKELBEZEICHNUNG", "BEZ", "TEXT", "KURZTEXT"], preis: ["VKPREIS", "VK_PREIS", "LISTENPREIS", "PREIS", "NETTO", "NETTOPREIS"], kosten: ["HERSTELLKOSTEN", "KOSTEN", "EKPREIS", "EK_PREIS", "SELBSTKOSTEN"], me: ["ME", "MENGENEINHEIT", "EINHEIT"], gruppe: ["ARTIKELGRUPPE", "WARENGRUPPE", "GRUPPE"] },
+    artikelSpalten: { code: ["ARTIKEL"], bild: ["BILD", "BILDURL", "DOCUMENTS", "IMAGE", "FOTO"], name: ["NAME", "BEZEICHNUNG", "ARTIKELBEZEICHNUNG", "BEZ", "TEXT", "KURZTEXT"], preis: ["VKPREIS", "VK_PREIS", "LISTENPREIS", "PREIS", "NETTO", "NETTOPREIS"], kosten: ["HERSTELLKOSTEN", "KOSTEN", "EKPREIS", "EK_PREIS", "SELBSTKOSTEN"], me: ["ME", "MENGENEINHEIT", "EINHEIT"], gruppe: ["ARTIKELGRUPPE", "WARENGRUPPE", "GRUPPE"] },
     loadQuery: async function (name) {
       if (!name || location.protocol === "file:") return null;
       const app = location.pathname.split("/").slice(0, 2).join("/");
