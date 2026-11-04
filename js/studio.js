@@ -846,6 +846,7 @@
     return kopf("Einstellungen", "") + `
       <section class="panel"><h3>Firma</h3><div class="formgitter">${f("firma", "name", "Firmenname")}${f("firma", "strasse", "Straße")}${f("firma", "ort", "PLZ und Ort")}${f("firma", "tel", "Telefon")}${f("firma", "web", "Website")}${f("firma", "ustid", "USt-IdNr.")}</div></section>
       <section class="panel"><h3>Angebote</h3><div class="formgitter">${f("root", "gueltigTage", "Gültigkeit in Tagen", "number")}${f("root", "mwst", "Umsatzsteuer %", "number")}</div></section>
+      ${abfragenPanel(e)}
       ${nummernPanel(e, f)}
       <section class="panel"><div class="panelkopf"><h3>Vertrieb</h3>${ro() ? "" : `<button class="btn klein" type="button" data-act="vtNeu">+ Person</button>`}</div>
         <div class="tabwrap ohne-rand"><table class="kompakt"><thead><tr><th>Name</th><th>Telefon</th><th>E-Mail</th><th></th></tr></thead><tbody>
@@ -858,6 +859,28 @@
         <p class="klein gedimmt">Für den Betrieb in APplus wird die Datenschicht (store.js) gegen Ihre Queries und Tabellen getauscht. Die Struktur steht in daten/demo.json.</p></section>`;
   });
   /* Angebotsnummern: eigener Nummernkreis oder aus APplus */
+  const ABFRAGEN = [["artikel", "Artikelstamm (Codes)", "ARTIKEL, NAME; optional VKPREIS, HERSTELLKOSTEN, ME"], ["kunden", "Kunden", "KUNDENNR, FIRMA, STRASSE, PLZ, ORT …"], ["vertrieb", "Vertrieb (Bearbeiter)", "PERSONAL, NAME, TELEFON, EMAIL"]];
+  function abfragenPanel(e) {
+    const qs = K.Store.abfragen(), st = K.Store.abfrageStatus || {}, cfg = (K.cfg && K.cfg.queries) || {};
+    return `<section class="panel"><h3>APplus-Abfragen</h3><p class="klein gedimmt">Name der Abfrage, die dem Dashboard zugeordnet ist (wie in APplus angelegt). Der Eintrag hier gilt für diesen Browser und hat Vorrang vor <code>KONF_CONFIG</code>.</p>
+      <div class="tabwrap ohne-rand"><table class="kompakt abf-tab"><thead><tr><th>Wofür</th><th>Abfrage</th><th>Stand</th><th></th></tr></thead><tbody>
+      ${ABFRAGEN.map(([k, t, sp]) => { const s0 = st[k]; return `<tr><td>${t}<div class="klein gedimmt">${sp}</div></td>
+        <td><input id="abf-${k}" class="mono" data-chg="abfName" data-k="${k}" value="${esc((e.abfragen || {})[k] ?? cfg[k] ?? "")}" placeholder="z. B. apx_Artikeldaten" aria-label="Abfrage für ${t}" ${dis()}></td>
+        <td class="klein" id="abf-st-${k}">${s0 ? s0.fehler ? `<span class="warntext">${esc(s0.fehler)}</span>` : `<span class="ok-text">${K.zahl(s0.zeilen)} Zeilen geladen</span>` : qs[k] ? "noch nicht geladen" : "–"}</td>
+        <td><button class="btn klein" type="button" data-act="abfTest" data-k="${k}" ${qs[k] ? "" : "disabled"}>Testen</button></td></tr>`; }).join("")}</tbody></table></div>
+      <div id="abf-test" class="klein" aria-live="polite"></div>
+      <div class="row"><button class="btn" type="button" data-act="lokalNeu">Daten aus APplus neu laden</button></div></section>`;
+  }
+  K.inp.abfName = async el => { const e = S().einst; e.abfragen = Object.assign({}, e.abfragen || {}, { [el.dataset.k]: el.value.trim() }); await K.Store.einstSpeichern(e, true); K.Store.log("Einstellungen", `Abfrage ${el.dataset.k}: ${el.value.trim() || "–"}`); K.render(); };
+  K.act.abfTest = async el => {
+    const k = el.dataset.k, name = K.Store.abfragen()[k], t = K.el("abf-test"); t.textContent = `frage ${name} ab …`;
+    try {
+      const rows = await K.cfg.loadQuery(name, k);
+      if (!Array.isArray(rows)) { t.innerHTML = `<span class="warntext">${location.protocol === "file:" ? "Abfragen lassen sich nur innerhalb von APplus abrufen." : "Die Abfrage hat keine Daten geliefert."}</span>`; return; }
+      const kopf = [...new Set(rows.slice(0, 50).flatMap(r => Object.keys(r || {})))];
+      t.innerHTML = `<b>${esc(name)}</b>: ${K.zahl(rows.length)} Zeilen · Spalten ${kopf.map(h => `<code>${esc(h)}</code>`).join(", ") || "–"}${rows[0] ? `<br>Beispiel: ${esc(kopf.map(h => rows[0][h]).join(" · "))}` : ""}${k === "artikel" && !kopf.some(h => h.toUpperCase() === "ARTIKEL") ? `<br><span class="warntext">Spalte ARTIKEL fehlt.</span>` : ""}<br>Mit „Daten aus APplus neu laden“ übernehmen.`;
+    } catch (err) { t.innerHTML = `<span class="warntext">${esc(name)}: ${esc(err.message || err)}</span>`; }
+  };
   function nummernPanel(e, f) {
     const z = Object.assign({ quelle: "app", abfrage: (K.cfg.queries || {}).angebotsnummer || "", feld: "", art: "naechste", ersatz: false }, e.nummern || {}), ap = z.quelle === "applus";
     const inp = (k, t, ph, hint) => `<div class="feld"><label for="nr-${k}">${t}</label><input id="nr-${k}" class="mono" data-chg="nrFeld" data-k="${k}" value="${esc(z[k] || "")}" placeholder="${esc(ph || "")}" ${dis()}>${hint ? `<span class="klein gedimmt">${hint}</span>` : ""}</div>`;

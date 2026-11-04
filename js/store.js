@@ -61,8 +61,17 @@
 
     /* ---------- Betrieb ohne Claude (z. B. APplus): Browser-Speicher + APplus-Abfragen ---------- */
     _schluessel() { return (K.cfg && K.cfg.storageKey) || "konf-v1"; },
+    /** Abfragenamen: aus KONF_CONFIG, überschrieben durch Studio › Einstellungen › APplus-Abfragen */
+    abfragen() {
+      const aus = Object.assign({}, (K.cfg && K.cfg.queries) || {});
+      let e = this.S && this.S.einst; if (!e) try { e = (JSON.parse(localStorage.getItem(this._schluessel()) || "null") || {}).einst; } catch (x) { e = null; }
+      for (const [k, v] of Object.entries((e && e.abfragen) || {})) if (v != null && String(v).trim() !== "") aus[k] = String(v).trim();
+      return aus;
+    },
+    abfrageStatus: {},
     async ladeLokal() {
       const S = this.S; let gespeichert = null;
+      if (this._lokalTimer && S.geladen) this._lokalSchreiben(); // noch offene Änderungen zuerst sichern
       try { gespeichert = JSON.parse(localStorage.getItem(this._schluessel()) || "null"); } catch (e) { gespeichert = null; }
       const d = await this.demoDaten();
       const q = await this._applusLaden();
@@ -83,21 +92,22 @@
       this._melde("alles");
     },
     async _applusLaden() {
-      const out = {}, cfg = K.cfg || {}, qs = cfg.queries || {}; this.ladefehler = []; this.applusQuellen = 0;
+      const out = {}, cfg = K.cfg || {}, qs = this.abfragen(); this.ladefehler = []; this.applusQuellen = 0; this.abfrageStatus = {};
       if (!cfg.loadQuery) return out;
       const blaetter = {};
       await Promise.all(["katalog", "produkte", "merkmale", "codes", "regeln", "stueckliste", "kunden", "artikel", "vertrieb"].map(async typ => {
         if (!qs[typ]) return;
         try {
           const rows = await cfg.loadQuery(qs[typ], typ);
-          if (!Array.isArray(rows)) return;
+          if (!Array.isArray(rows)) { this.abfrageStatus[typ] = { name: qs[typ], fehler: location.protocol === "file:" ? "nur innerhalb von APplus abrufbar" : "keine Daten geliefert" }; return; }
+          this.abfrageStatus[typ] = { name: qs[typ], zeilen: rows.length };
           this.applusQuellen++;
           if (typ === "kunden") { out.kunden = rows.map(kundeAusZeile).filter(k => k.firma); return; }
           if (typ === "vertrieb") { out.vertrieb = rows.map(vertriebAusZeile).filter(v => v.name); return; }
           if (typ === "artikel") { out.artikel = rows; return; }
           const kopf = [...new Set(rows.flatMap(r => Object.keys(r)))];
           blaetter[typ] = [kopf, ...rows.map(r => kopf.map(h => r[h] ?? ""))];
-        } catch (e) { console.warn("[Konfigurator] Abfrage fehlgeschlagen:", qs[typ], e); this.ladefehler.push(qs[typ] + ": " + (e.message || e)); }
+        } catch (e) { console.warn("[Konfigurator] Abfrage fehlgeschlagen:", qs[typ], e); this.ladefehler.push(qs[typ] + ": " + (e.message || e)); this.abfrageStatus[typ] = { name: qs[typ], fehler: e.message || String(e) }; }
       }));
       if (Object.keys(blaetter).length && K.X) {
         const zuo = K.X.zuordnungVorschlagen(blaetter, (this.S.einst || {}).importZuordnung);
@@ -166,11 +176,12 @@
     _lokalSichern() {
       if (this.modus !== "lokal") return;
       clearTimeout(this._lokalTimer);
-      this._lokalTimer = setTimeout(() => {
-        const S = this.S;
-        try { localStorage.setItem(this._schluessel(), JSON.stringify({ entwurf: S.entwurf, live: S.live, kunden: S.kunden, angebote: S.angebote, einst: S.einst, releases: S.releases, protokoll: S.protokoll, prefs: S.prefs, quelle: S.quelle })); }
-        catch (e) { console.warn("[Konfigurator] Browser-Speicher voll oder gesperrt", e); }
-      }, 400);
+      this._lokalTimer = setTimeout(() => this._lokalSchreiben(), 400);
+    },
+    _lokalSchreiben() {
+      clearTimeout(this._lokalTimer); this._lokalTimer = null; const S = this.S;
+      try { localStorage.setItem(this._schluessel(), JSON.stringify({ entwurf: S.entwurf, live: S.live, kunden: S.kunden, angebote: S.angebote, einst: S.einst, releases: S.releases, protokoll: S.protokoll, prefs: S.prefs, quelle: S.quelle })); }
+      catch (e) { console.warn("[Konfigurator] Browser-Speicher voll oder gesperrt", e); }
     },
     lokalZuruecksetzen() { try { localStorage.removeItem(this._schluessel()); } catch (e) {} },
 

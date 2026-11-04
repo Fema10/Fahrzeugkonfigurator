@@ -306,8 +306,16 @@
     q = q.trim(); if (!q) return [];
     const out = [], gesehen = new Set(), ql = q.toLowerCase();
     if (K.Store.artikelQuelle) for (const a of K.Store.artikelSuche(q, 40)) { const C = norm(a.code); if (gesehen.has(C)) continue; gesehen.add(C); out.push({ code: a.code, name: a.name, preis: a.preis }); }
-    for (const m of mo.merkmale) for (const w of m.werte) { if (!w.code || out.length >= 40) continue; const C = norm(w.code); if (gesehen.has(C) || !(w.code + " " + w.name).toLowerCase().includes(ql)) continue; gesehen.add(C); out.push({ code: w.code, name: w.name, preis: w.preis, gruppe: m.name }); }
+    // Codes aus dem Modell nur, wenn kein echter Artikelstamm (APplus oder Excel) geladen ist
+    if (!K.Store.artikelQuelle || K.Store.artikelQuelle === "beispiel") for (const m of mo.merkmale) for (const w of m.werte) { if (!w.code || out.length >= 40) continue; const C = norm(w.code); if (gesehen.has(C) || !(w.code + " " + w.name).toLowerCase().includes(ql)) continue; gesehen.add(C); out.push({ code: w.code, name: w.name, preis: w.preis, gruppe: m.name }); }
     const vorn = out.filter(x => x.code.toLowerCase().startsWith(ql)); return [...vorn, ...out.filter(x => !vorn.includes(x))].slice(0, 40);
+  }
+  function quellZeile() {
+    const st = K.Store.abfrageStatus?.artikel, q = K.Store.artikelQuelle, n = K.Store.artikel.size, name = K.Store.abfragen().artikel;
+    if (q === "applus") return `<p class="kb-quelle ok klein">Quelle: APplus-Abfrage <code>${esc(st?.name || name)}</code> · ${K.zahl(n)} Artikel</p>`;
+    if (q === "excel") return `<p class="kb-quelle klein">Quelle: Artikel aus Excel-Import · ${K.zahl(n)} Artikel</p>`;
+    const grund = name ? (st?.fehler ? `Abfrage <code>${esc(name)}</code> nicht geladen: ${esc(st.fehler)}` : `Abfrage <code>${esc(name)}</code> nicht geladen`) : "Keine Artikel-Abfrage eingetragen";
+    return `<div class="hinweis klein kb-quelle"><b>${grund}.</b> Die Vorschläge kommen aus Beispieldaten bzw. den Codes im Modell. ${ro() ? "" : `<a href="#studio-einstellungen" data-act="geheAbfragen">Abfrage eintragen und testen</a>`}</div>`;
   }
   function pool(mo) {
     const kb = K.kb, o = objekt(kb.sel), istFz = kb.sel[0] === "p", istFam = kb.sel[0] === "g", q = kb.poolSuche;
@@ -330,7 +338,7 @@
       <p class="klein ${ziel ? "" : "gefahr-text"}">${zielText}</p>
       ${q.trim() && ziel && neu.length > 1 ? `<button type="button" class="btn klein" data-act="kbAlleUebernehmen">Alle ${neu.length} neuen Treffer übernehmen</button>` : ""}
       ${!q.trim() ? `<p class="klein gedimmt">Tippen, dann mit <b>Übernehmen</b>, <kbd>Enter</kbd> oder per Ziehen in den Katalog. <kbd>↑</kbd> <kbd>↓</kbd> wählen den Vorschlag.${istFz ? " Ziehen auf eine Gruppe legt den Code dort ab." : ""}</p>` : ""}
-      ${!K.Store.artikelQuelle ? `<div class="hinweis klein">Kein Artikelstamm geladen, gesucht wird nur in den Codes des Modells. In APplus die Abfrage <code>queries.artikel</code> auf Tabelle ARTIKEL einrichten oder unter Excel-Import eine Mappe mit Blatt „Import“ einlesen.</div>` : ""}</aside>`;
+      ${quellZeile()}</aside>`;
   }
 
 
@@ -440,6 +448,7 @@
     else return;
     K.render(); sucheFokus();
   };
+  A.geheAbfragen = () => K.gehe("studio-einstellungen");
   A.kbUebernehmen = (el, e) => { e?.stopPropagation?.(); uebernehmen([el.dataset.c]); };
   A.kbAlleUebernehmen = () => { const mo = ent(), o = objekt(K.kb.sel), da = new Set(); if (K.kb.sel[0] === "p") for (const x of E.produktMerkmale(mo, o)) for (const w of x.werte) if (w.code) da.add(norm(w.code)); uebernehmen(treffer(mo, K.kb.poolSuche).map(a => a.code).filter(c => !da.has(norm(c)))); };
   A.kbAlsFz = (el, e) => { e?.stopPropagation?.(); const g = objekt(K.kb.sel); if (!g) return; const r = fahrzeugeAnlegen(g.id, [el.dataset.c]); K.kb.poolSuche = ""; geaendert(`${el.dataset.c} als Fahrzeug in ${g.name}`); K.toast(r.neu ? `${el.dataset.c} als Fahrzeug angelegt` : r.verschoben ? `${el.dataset.c} hierher verschoben` : `${el.dataset.c} ist schon ein Fahrzeug`); sucheFokus(); };

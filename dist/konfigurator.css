@@ -1084,3 +1084,7 @@
 @media (hover:none){#konfigurator .kb-ac-liste li .kb-ac-knopf{display:flex!important}}
 #konfigurator .kb-ac-leer{margin:6px 2px;color:var(--muted)}
 #konfigurator .kb-pool kbd{font:600 10.5px var(--f-mono);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px;background:var(--surface)}
+#konfigurator .kb-quelle{margin:8px 0 0}
+#konfigurator .kb-quelle.ok{color:var(--ok)}
+#konfigurator .abf-tab input{width:100%;min-width:14ch}
+#konfigurator .ok-text{color:var(--ok)}

@@ -1086,6 +1086,10 @@
 @media (hover:none){#konfigurator .kb-ac-liste li .kb-ac-knopf{display:flex!important}}
 #konfigurator .kb-ac-leer{margin:6px 2px;color:var(--muted)}
 #konfigurator .kb-pool kbd{font:600 10.5px var(--f-mono);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px;background:var(--surface)}
+#konfigurator .kb-quelle{margin:8px 0 0}
+#konfigurator .kb-quelle.ok{color:var(--ok)}
+#konfigurator .abf-tab input{width:100%;min-width:14ch}
+#konfigurator .ok-text{color:var(--ok)}
 
 </style>
 
@@ -5014,8 +5018,17 @@
 
     /* ---------- Betrieb ohne Claude (z. B. APplus): Browser-Speicher + APplus-Abfragen ---------- */
     _schluessel() { return (K.cfg && K.cfg.storageKey) || "konf-v1"; },
+    /** Abfragenamen: aus KONF_CONFIG, überschrieben durch Studio › Einstellungen › APplus-Abfragen */
+    abfragen() {
+      const aus = Object.assign({}, (K.cfg && K.cfg.queries) || {});
+      let e = this.S && this.S.einst; if (!e) try { e = (JSON.parse(localStorage.getItem(this._schluessel()) || "null") || {}).einst; } catch (x) { e = null; }
+      for (const [k, v] of Object.entries((e && e.abfragen) || {})) if (v != null && String(v).trim() !== "") aus[k] = String(v).trim();
+      return aus;
+    },
+    abfrageStatus: {},
     async ladeLokal() {
       const S = this.S; let gespeichert = null;
+      if (this._lokalTimer && S.geladen) this._lokalSchreiben(); // noch offene Änderungen zuerst sichern
       try { gespeichert = JSON.parse(localStorage.getItem(this._schluessel()) || "null"); } catch (e) { gespeichert = null; }
       const d = await this.demoDaten();
       const q = await this._applusLaden();
@@ -5036,21 +5049,22 @@
       this._melde("alles");
     },
     async _applusLaden() {
-      const out = {}, cfg = K.cfg || {}, qs = cfg.queries || {}; this.ladefehler = []; this.applusQuellen = 0;
+      const out = {}, cfg = K.cfg || {}, qs = this.abfragen(); this.ladefehler = []; this.applusQuellen = 0; this.abfrageStatus = {};
       if (!cfg.loadQuery) return out;
       const blaetter = {};
       await Promise.all(["katalog", "produkte", "merkmale", "codes", "regeln", "stueckliste", "kunden", "artikel", "vertrieb"].map(async typ => {
         if (!qs[typ]) return;
         try {
           const rows = await cfg.loadQuery(qs[typ], typ);
-          if (!Array.isArray(rows)) return;
+          if (!Array.isArray(rows)) { this.abfrageStatus[typ] = { name: qs[typ], fehler: location.protocol === "file:" ? "nur innerhalb von APplus abrufbar" : "keine Daten geliefert" }; return; }
+          this.abfrageStatus[typ] = { name: qs[typ], zeilen: rows.length };
           this.applusQuellen++;
           if (typ === "kunden") { out.kunden = rows.map(kundeAusZeile).filter(k => k.firma); return; }
           if (typ === "vertrieb") { out.vertrieb = rows.map(vertriebAusZeile).filter(v => v.name); return; }
           if (typ === "artikel") { out.artikel = rows; return; }
           const kopf = [...new Set(rows.flatMap(r => Object.keys(r)))];
           blaetter[typ] = [kopf, ...rows.map(r => kopf.map(h => r[h] ?? ""))];
-        } catch (e) { console.warn("[Konfigurator] Abfrage fehlgeschlagen:", qs[typ], e); this.ladefehler.push(qs[typ] + ": " + (e.message || e)); }
+        } catch (e) { console.warn("[Konfigurator] Abfrage fehlgeschlagen:", qs[typ], e); this.ladefehler.push(qs[typ] + ": " + (e.message || e)); this.abfrageStatus[typ] = { name: qs[typ], fehler: e.message || String(e) }; }
       }));
       if (Object.keys(blaetter).length && K.X) {
         const zuo = K.X.zuordnungVorschlagen(blaetter, (this.S.einst || {}).importZuordnung);
@@ -5119,11 +5133,12 @@
     _lokalSichern() {
       if (this.modus !== "lokal") return;
       clearTimeout(this._lokalTimer);
-      this._lokalTimer = setTimeout(() => {
-        const S = this.S;
-        try { localStorage.setItem(this._schluessel(), JSON.stringify({ entwurf: S.entwurf, live: S.live, kunden: S.kunden, angebote: S.angebote, einst: S.einst, releases: S.releases, protokoll: S.protokoll, prefs: S.prefs, quelle: S.quelle })); }
-        catch (e) { console.warn("[Konfigurator] Browser-Speicher voll oder gesperrt", e); }
-      }, 400);
+      this._lokalTimer = setTimeout(() => this._lokalSchreiben(), 400);
+    },
+    _lokalSchreiben() {
+      clearTimeout(this._lokalTimer); this._lokalTimer = null; const S = this.S;
+      try { localStorage.setItem(this._schluessel(), JSON.stringify({ entwurf: S.entwurf, live: S.live, kunden: S.kunden, angebote: S.angebote, einst: S.einst, releases: S.releases, protokoll: S.protokoll, prefs: S.prefs, quelle: S.quelle })); }
+      catch (e) { console.warn("[Konfigurator] Browser-Speicher voll oder gesperrt", e); }
     },
     lokalZuruecksetzen() { try { localStorage.removeItem(this._schluessel()); } catch (e) {} },
 
@@ -7285,6 +7300,7 @@
     return kopf("Einstellungen", "") + `
       <section class="panel"><h3>Firma</h3><div class="formgitter">${f("firma", "name", "Firmenname")}${f("firma", "strasse", "Straße")}${f("firma", "ort", "PLZ und Ort")}${f("firma", "tel", "Telefon")}${f("firma", "web", "Website")}${f("firma", "ustid", "USt-IdNr.")}</div></section>
       <section class="panel"><h3>Angebote</h3><div class="formgitter">${f("root", "gueltigTage", "Gültigkeit in Tagen", "number")}${f("root", "mwst", "Umsatzsteuer %", "number")}</div></section>
+      ${abfragenPanel(e)}
       ${nummernPanel(e, f)}
       <section class="panel"><div class="panelkopf"><h3>Vertrieb</h3>${ro() ? "" : `<button class="btn klein" type="button" data-act="vtNeu">+ Person</button>`}</div>
         <div class="tabwrap ohne-rand"><table class="kompakt"><thead><tr><th>Name</th><th>Telefon</th><th>E-Mail</th><th></th></tr></thead><tbody>
@@ -7297,6 +7313,28 @@
         <p class="klein gedimmt">Für den Betrieb in APplus wird die Datenschicht (store.js) gegen Ihre Queries und Tabellen getauscht. Die Struktur steht in daten/demo.json.</p></section>`;
   });
   /* Angebotsnummern: eigener Nummernkreis oder aus APplus */
+  const ABFRAGEN = [["artikel", "Artikelstamm (Codes)", "ARTIKEL, NAME; optional VKPREIS, HERSTELLKOSTEN, ME"], ["kunden", "Kunden", "KUNDENNR, FIRMA, STRASSE, PLZ, ORT …"], ["vertrieb", "Vertrieb (Bearbeiter)", "PERSONAL, NAME, TELEFON, EMAIL"]];
+  function abfragenPanel(e) {
+    const qs = K.Store.abfragen(), st = K.Store.abfrageStatus || {}, cfg = (K.cfg && K.cfg.queries) || {};
+    return `<section class="panel"><h3>APplus-Abfragen</h3><p class="klein gedimmt">Name der Abfrage, die dem Dashboard zugeordnet ist (wie in APplus angelegt). Der Eintrag hier gilt für diesen Browser und hat Vorrang vor <code>KONF_CONFIG</code>.</p>
+      <div class="tabwrap ohne-rand"><table class="kompakt abf-tab"><thead><tr><th>Wofür</th><th>Abfrage</th><th>Stand</th><th></th></tr></thead><tbody>
+      ${ABFRAGEN.map(([k, t, sp]) => { const s0 = st[k]; return `<tr><td>${t}<div class="klein gedimmt">${sp}</div></td>
+        <td><input id="abf-${k}" class="mono" data-chg="abfName" data-k="${k}" value="${esc((e.abfragen || {})[k] ?? cfg[k] ?? "")}" placeholder="z. B. apx_Artikeldaten" aria-label="Abfrage für ${t}" ${dis()}></td>
+        <td class="klein" id="abf-st-${k}">${s0 ? s0.fehler ? `<span class="warntext">${esc(s0.fehler)}</span>` : `<span class="ok-text">${K.zahl(s0.zeilen)} Zeilen geladen</span>` : qs[k] ? "noch nicht geladen" : "–"}</td>
+        <td><button class="btn klein" type="button" data-act="abfTest" data-k="${k}" ${qs[k] ? "" : "disabled"}>Testen</button></td></tr>`; }).join("")}</tbody></table></div>
+      <div id="abf-test" class="klein" aria-live="polite"></div>
+      <div class="row"><button class="btn" type="button" data-act="lokalNeu">Daten aus APplus neu laden</button></div></section>`;
+  }
+  K.inp.abfName = async el => { const e = S().einst; e.abfragen = Object.assign({}, e.abfragen || {}, { [el.dataset.k]: el.value.trim() }); await K.Store.einstSpeichern(e, true); K.Store.log("Einstellungen", `Abfrage ${el.dataset.k}: ${el.value.trim() || "–"}`); K.render(); };
+  K.act.abfTest = async el => {
+    const k = el.dataset.k, name = K.Store.abfragen()[k], t = K.el("abf-test"); t.textContent = `frage ${name} ab …`;
+    try {
+      const rows = await K.cfg.loadQuery(name, k);
+      if (!Array.isArray(rows)) { t.innerHTML = `<span class="warntext">${location.protocol === "file:" ? "Abfragen lassen sich nur innerhalb von APplus abrufen." : "Die Abfrage hat keine Daten geliefert."}</span>`; return; }
+      const kopf = [...new Set(rows.slice(0, 50).flatMap(r => Object.keys(r || {})))];
+      t.innerHTML = `<b>${esc(name)}</b>: ${K.zahl(rows.length)} Zeilen · Spalten ${kopf.map(h => `<code>${esc(h)}</code>`).join(", ") || "–"}${rows[0] ? `<br>Beispiel: ${esc(kopf.map(h => rows[0][h]).join(" · "))}` : ""}${k === "artikel" && !kopf.some(h => h.toUpperCase() === "ARTIKEL") ? `<br><span class="warntext">Spalte ARTIKEL fehlt.</span>` : ""}<br>Mit „Daten aus APplus neu laden“ übernehmen.`;
+    } catch (err) { t.innerHTML = `<span class="warntext">${esc(name)}: ${esc(err.message || err)}</span>`; }
+  };
   function nummernPanel(e, f) {
     const z = Object.assign({ quelle: "app", abfrage: (K.cfg.queries || {}).angebotsnummer || "", feld: "", art: "naechste", ersatz: false }, e.nummern || {}), ap = z.quelle === "applus";
     const inp = (k, t, ph, hint) => `<div class="feld"><label for="nr-${k}">${t}</label><input id="nr-${k}" class="mono" data-chg="nrFeld" data-k="${k}" value="${esc(z[k] || "")}" placeholder="${esc(ph || "")}" ${dis()}>${hint ? `<span class="klein gedimmt">${hint}</span>` : ""}</div>`;
@@ -9590,8 +9628,16 @@
     q = q.trim(); if (!q) return [];
     const out = [], gesehen = new Set(), ql = q.toLowerCase();
     if (K.Store.artikelQuelle) for (const a of K.Store.artikelSuche(q, 40)) { const C = norm(a.code); if (gesehen.has(C)) continue; gesehen.add(C); out.push({ code: a.code, name: a.name, preis: a.preis }); }
-    for (const m of mo.merkmale) for (const w of m.werte) { if (!w.code || out.length >= 40) continue; const C = norm(w.code); if (gesehen.has(C) || !(w.code + " " + w.name).toLowerCase().includes(ql)) continue; gesehen.add(C); out.push({ code: w.code, name: w.name, preis: w.preis, gruppe: m.name }); }
+    // Codes aus dem Modell nur, wenn kein echter Artikelstamm (APplus oder Excel) geladen ist
+    if (!K.Store.artikelQuelle || K.Store.artikelQuelle === "beispiel") for (const m of mo.merkmale) for (const w of m.werte) { if (!w.code || out.length >= 40) continue; const C = norm(w.code); if (gesehen.has(C) || !(w.code + " " + w.name).toLowerCase().includes(ql)) continue; gesehen.add(C); out.push({ code: w.code, name: w.name, preis: w.preis, gruppe: m.name }); }
     const vorn = out.filter(x => x.code.toLowerCase().startsWith(ql)); return [...vorn, ...out.filter(x => !vorn.includes(x))].slice(0, 40);
+  }
+  function quellZeile() {
+    const st = K.Store.abfrageStatus?.artikel, q = K.Store.artikelQuelle, n = K.Store.artikel.size, name = K.Store.abfragen().artikel;
+    if (q === "applus") return `<p class="kb-quelle ok klein">Quelle: APplus-Abfrage <code>${esc(st?.name || name)}</code> · ${K.zahl(n)} Artikel</p>`;
+    if (q === "excel") return `<p class="kb-quelle klein">Quelle: Artikel aus Excel-Import · ${K.zahl(n)} Artikel</p>`;
+    const grund = name ? (st?.fehler ? `Abfrage <code>${esc(name)}</code> nicht geladen: ${esc(st.fehler)}` : `Abfrage <code>${esc(name)}</code> nicht geladen`) : "Keine Artikel-Abfrage eingetragen";
+    return `<div class="hinweis klein kb-quelle"><b>${grund}.</b> Die Vorschläge kommen aus Beispieldaten bzw. den Codes im Modell. ${ro() ? "" : `<a href="#studio-einstellungen" data-act="geheAbfragen">Abfrage eintragen und testen</a>`}</div>`;
   }
   function pool(mo) {
     const kb = K.kb, o = objekt(kb.sel), istFz = kb.sel[0] === "p", istFam = kb.sel[0] === "g", q = kb.poolSuche;
@@ -9614,7 +9660,7 @@
       <p class="klein ${ziel ? "" : "gefahr-text"}">${zielText}</p>
       ${q.trim() && ziel && neu.length > 1 ? `<button type="button" class="btn klein" data-act="kbAlleUebernehmen">Alle ${neu.length} neuen Treffer übernehmen</button>` : ""}
       ${!q.trim() ? `<p class="klein gedimmt">Tippen, dann mit <b>Übernehmen</b>, <kbd>Enter</kbd> oder per Ziehen in den Katalog. <kbd>↑</kbd> <kbd>↓</kbd> wählen den Vorschlag.${istFz ? " Ziehen auf eine Gruppe legt den Code dort ab." : ""}</p>` : ""}
-      ${!K.Store.artikelQuelle ? `<div class="hinweis klein">Kein Artikelstamm geladen, gesucht wird nur in den Codes des Modells. In APplus die Abfrage <code>queries.artikel</code> auf Tabelle ARTIKEL einrichten oder unter Excel-Import eine Mappe mit Blatt „Import“ einlesen.</div>` : ""}</aside>`;
+      ${quellZeile()}</aside>`;
   }
 
 
@@ -9724,6 +9770,7 @@
     else return;
     K.render(); sucheFokus();
   };
+  A.geheAbfragen = () => K.gehe("studio-einstellungen");
   A.kbUebernehmen = (el, e) => { e?.stopPropagation?.(); uebernehmen([el.dataset.c]); };
   A.kbAlleUebernehmen = () => { const mo = ent(), o = objekt(K.kb.sel), da = new Set(); if (K.kb.sel[0] === "p") for (const x of E.produktMerkmale(mo, o)) for (const w of x.werte) if (w.code) da.add(norm(w.code)); uebernehmen(treffer(mo, K.kb.poolSuche).map(a => a.code).filter(c => !da.has(norm(c)))); };
   A.kbAlsFz = (el, e) => { e?.stopPropagation?.(); const g = objekt(K.kb.sel); if (!g) return; const r = fahrzeugeAnlegen(g.id, [el.dataset.c]); K.kb.poolSuche = ""; geaendert(`${el.dataset.c} als Fahrzeug in ${g.name}`); K.toast(r.neu ? `${el.dataset.c} als Fahrzeug angelegt` : r.verschoben ? `${el.dataset.c} hierher verschoben` : `${el.dataset.c} ist schon ein Fahrzeug`); sucheFokus(); };
