@@ -1095,6 +1095,24 @@
 #konfigurator .kb-silh img,#konfigurator .kachel-bild img{max-width:100%;max-height:100%;object-fit:contain}
 #konfigurator .kb-silh:has(img){height:90px;background:#fff}
 #konfigurator .bild-ersatz{display:contents}
+/* Fahrzeug-Kacheln im Katalogaufbau: Bearbeiten / Löschen */
+#konfigurator .kb-kachel-w{position:relative;display:flex}
+#konfigurator .kb-kachel-w>.kb-kachel{flex:1;min-width:0}
+#konfigurator .kb-kachel-akt{position:absolute;top:6px;right:6px;display:flex;gap:2px;opacity:0;transition:opacity .12s}
+#konfigurator .kb-kachel-w:hover .kb-kachel-akt,#konfigurator .kb-kachel-w:focus-within .kb-kachel-akt{opacity:1}
+@media (hover:none){#konfigurator .kb-kachel-akt{opacity:1}}
+#konfigurator .kb-kachel-akt .ikon{background:var(--surface);border:1px solid var(--line);border-radius:5px;width:28px;height:28px;display:grid;place-items:center;cursor:pointer;font-size:13px}
+#konfigurator .kb-kachel-frage{position:absolute;inset:auto 6px 6px 6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:var(--surface);border:1px solid var(--bad);border-radius:6px;padding:6px;font-size:12px}
+#konfigurator .kb-kachel-frage span{flex:1 0 100%;font-weight:600}
+/* Konfigurator: Foto statt 3D, Ersatz ohne 3D */
+#konfigurator .fotoplatz{display:grid;place-items:center;background:#fff}
+#konfigurator .fotoplatz img{width:100%;height:100%;object-fit:contain}
+#konfigurator .ansicht.ohne3d .nur3d,#konfigurator .ansicht.mit-foto .nur3d{display:none}
+#konfigurator .v3d-ersatz{display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center}
+#konfigurator .v3d-ersatz svg{width:min(70%,360px);height:auto;opacity:.55}
+#konfigurator .konf-leer{padding:40px 24px}
+#konfigurator .kb-preis-fehlt{font-size:13px;font-weight:500;opacity:.75}
+#konfigurator .kachel-knoepfe{gap:4px}
 
 </style>
 
@@ -5681,7 +5699,7 @@
     if (!T()) {
       platz.innerHTML = `<div class="v3d-leer">3D-Ansicht wird geladen …</div>`;
       K.lib("three").then(() => { if (platz.isConnected) { platz.innerHTML = ""; K.viewerEinhaengen(platz, mo, prod, sel); } })
-        .catch(() => { if (platz.isConnected) platz.innerHTML = `<div class="v3d-leer">Die 3D-Bibliothek ist nicht erreichbar. Konfiguration und Preise funktionieren trotzdem.</div>`; });
+        .catch(() => { if (!platz.isConnected) return; platz.innerHTML = `<div class="v3d-leer v3d-ersatz">${K.silhouette ? K.silhouette(prod?.visual?.typ, "var(--muted)") : ""}<span class="klein">Keine 3D-Ansicht verfügbar</span></div>`; platz.closest(".ansicht")?.classList.add("ohne3d"); });
       return null;
     }
     const v = K.viewer(); platz.appendChild(v.el); v.groesse(); v.zeige(mo, prod, sel); return v;
@@ -5912,7 +5930,7 @@
         <div class="kachel-titel"><b>${esc(p.name)}</b><span class="info" title="${esc(p.beschreibung)}" tabindex="0" aria-label="${esc(p.beschreibung)}">i</span>
           <button type="button" class="stern" data-act="favorit" data-p="${p.id}" aria-pressed="${fav}" title="${fav ? "Aus Favoriten entfernen" : "Zu Favoriten"}">${fav ? "★" : "☆"}</button></div>
         <span class="mono klein gedimmt">${esc(p.code || p.artnr || "")}</span>
-        <div class="kachel-fuss"><span class="num">ab ${K.eur(mo ? abPreis(mo, p) : p.basispreis)}</span><button type="button" class="zahnrad" data-act="konfigStart" data-p="${p.id}" title="Konfigurieren" aria-label="Konfigurieren">⚙</button></div>
+        <div class="kachel-fuss"><span class="num">ab ${K.eur(mo ? abPreis(mo, p) : p.basispreis)}</span><span class="row kachel-knoepfe">${K.Store.schreiben ? `<button type="button" class="zahnrad" data-act="kbBearbeiten" data-p="${p.id}" title="Im Katalog aufbauen bearbeiten oder löschen" aria-label="${esc(p.name)} bearbeiten">✎</button>` : ""}<button type="button" class="zahnrad" data-act="konfigStart" data-p="${p.id}" title="Konfigurieren" aria-label="Konfigurieren">⚙</button></span></div>
       </div></article>`;
   }
   function baum(mo, gid, tiefe) {
@@ -5958,6 +5976,9 @@
         ${prods.length ? `<div class="kacheln">${prods.map(p => produktKarte(p, mo)).join("")}</div>` : `<div class="leer">In dieser Auswahl gibt es keine Fahrzeuge.</div>`}
       </section></div>`;
   });
+  /** Fahrzeug im Studio › Katalog aufbauen öffnen (ändern, Codes, löschen) */
+  K.act.kbBearbeiten = el => { const pid = el.dataset.p, mo = S().entwurf; if (!mo || !mo.produkte.some(x => x.id === pid)) return K.toast("Dieses Fahrzeug ist im Entwurf nicht mehr vorhanden (bereits gelöscht, wartet auf Freigabe)."); K.kat.entwurf = false; K.konf.entwurf = false; K.kb.sel = "p:" + pid; K.kb.loeschen = null; K.gehe("studio-katalog"); };
+  K.act.konfAnsicht = () => { K.konf.zeige3d = !K.konf.zeige3d; K.render(); };
   K.act.katEntwurfZeigen = () => { K.kat.entwurf = true; K.render(); };
   K.act.katZurFreigabe = () => K.gehe("studio-freigabe");
   K.act.katZumBau = () => { K.kat.entwurf = false; K.gehe("studio-katalog"); };
@@ -6062,7 +6083,7 @@
     const ga = p.grundausstattung || [];
     const gaHtml = !ga.length ? "" : `<details class="ga-block" ${k.gaOffen ? "open" : ""}><summary data-act="konfGa"><b>Grundausstattung</b><span class="gedimmt klein">${ga.length} Positionen inklusive</span></summary>
       ${[...new Set(ga.map(x => x.gruppe || ""))].map(gr => `${gr ? `<div class="eyebrow">${esc(gr)}</div>` : ""}<ul>${ga.filter(x => (x.gruppe || "") === gr).map(x => `<li><code>${esc(x.code)}</code> ${esc(x.name)}</li>`).join("")}</ul>`).join("")}</details>`;
-    if (!bereiche.length && !["kalkulation", "stueckliste"].includes(k.tab)) links = gaHtml || `<div class="leer">Für dieses Fahrzeug gibt es keine Auswahl.</div>`;
+    if (!bereiche.length && !["kalkulation", "stueckliste"].includes(k.tab)) links = gaHtml || `<div class="leer konf-leer"><b>Für dieses Fahrzeug sind noch keine Codes hinterlegt.</b><br>Es wird mit dem Grundpreis${p.basispreis ? ` von ${K.eur(p.basispreis)}` : ""} angeboten.${K.Store.schreiben ? `<br><br><button class="btn primary" type="button" data-act="kbBearbeiten" data-p="${p.id}">Codes im Katalog aufbauen hinzufügen</button>` : ""}</div>`;
     else if (bereiche.includes(k.tab)) {
       const imBereich = pm.filter(x => E.bereich(x.m) === k.tab), abschnitte = [...new Set(imBereich.map(x => x.m.abschnitt || ""))];
       links = (k.tab === bereiche[0] ? gaHtml : "") + abschnitte.map(ab => `<section class="abschnittblock">${ab && ab !== k.tab ? `<h2>${esc(ab)}</h2>` : ""}${imBereich.filter(x => (x.m.abschnitt || "") === ab).map(x => merkmalHtml(mo, p, x.m, x.werte, g, gs, k.sel)).join("")}</section>`).join("");
@@ -6078,16 +6099,16 @@
         <tr class="summe"><td colspan="3">Summe je Fahrzeug</td><td class="r num">${K.eur(preis.einzel)}</td><td class="r num">${K.eur(preis.kosten)}</td><td class="r num">${K.eur(db)}</td></tr></tbody></table></div>
         <p class="klein gedimmt" style="margin-top:8px">Marge ${K.zahl(marge, 1)} %. Kalkulationswerte sind intern und erscheinen nicht im Angebot.</p>`;
     }
-    const ziel = k.ziel;
+    const ziel = k.ziel, foto = p.bild ? K.bildUrl(p.bild) : K.artikelBild(p.code);
     K.nach(v => { const pl = v.querySelector("[data-viewer]"); if (pl) K.viewerEinhaengen(pl, mo, p, k.sel); });
     const zahl = b => offenAlle.filter(m => E.bereich(m) === b).length;
     const uebernehmenText = k.entwurf ? "" : ziel && ziel.idx != null ? `Position ${(ziel.idx + 1) * 10} aktualisieren` : ziel ? `In ${esc(ziel.nr)} übernehmen` : "Übernehmen";
-    return `${k.entwurf ? `<div class="hinweis warn" style="margin-bottom:10px">Sie testen den <b>Entwurf</b> des Modells. Das Ergebnis kann nicht in Angebote übernommen werden. <a href="#studio-regeln">Zurück ins Studio</a></div>` : ""}
+    return `${k.entwurf ? `<div class="hinweis warn" style="margin-bottom:10px">Sie testen den <b>Entwurf</b> des Modells. Das Ergebnis kann nicht in Angebote übernommen werden. <button type="button" class="link" data-act="kbBearbeiten" data-p="${p.id}">Zurück zum Katalog aufbauen</button></div>` : ""}
     <header class="konf-bar">
       <span class="kb-bild">${produktBild(p, "currentColor")}</span>
       <div class="kb-name"><b>${esc(p.name)}</b><span class="mono">${esc(p.code || p.artnr || "")}</span></div>
       <span class="kb-version">${k.entwurf ? "Entwurf" : "Modell v" + mo.version}</span>
-      <div class="kb-preis num">${K.eur2(preis.einzel)}</div>
+      <div class="kb-preis num">${preis.einzel || preis.zeilen.some(z => z.preis) ? K.eur2(preis.einzel) : `<span class="kb-preis-fehlt" title="Weder Grundpreis noch Preise an den Codes hinterlegt">kein Preis hinterlegt</span>`}</div>
       ${uebernehmenText ? `<button class="btn gelb" type="button" data-act="konfUebernehmen">✓ ${uebernehmenText}</button>` : ""}
       ${ziel && ziel.idx != null ? `<button class="btn kb-btn" type="button" data-act="konfZielLoesen">Als neue Position</button>` : ""}
       <button class="btn kb-btn" type="button" data-act="konfSchliessen">✕ Schließen</button>
@@ -6101,9 +6122,9 @@
         <div class="abschnitte">${links}</div>
       </div>
       <aside class="side">
-        <div class="panel ansicht"><div data-viewer class="viewerplatz"></div>
-          <div class="row zwischen" style="padding:0 4px"><span class="gedimmt klein">${offenAlle.length ? `⚠ ${offenAlle.length} Pflichtangaben offen` : "Konfiguration vollständig"}</span>
-            <span class="row"><button class="btn klein" type="button" data-act="export3d" data-f="png">Bild speichern</button><button class="btn klein" type="button" data-act="export3d" data-f="glb">3D-Szene exportieren</button></span></div></div>
+        <div class="panel ansicht${foto && !k.zeige3d ? " mit-foto" : ""}">${foto && !k.zeige3d ? `<div class="viewerplatz fotoplatz">${K.bildMitErsatz(foto, `<div class="v3d-leer">${K.silhouette(p.visual?.typ, "var(--muted)")}</div>`)}</div>` : `<div data-viewer class="viewerplatz"></div>`}
+          <div class="row zwischen" style="padding:0 4px"><span class="gedimmt klein">${offenAlle.length ? `⚠ ${offenAlle.length} Pflichtangaben offen` : bereiche.length ? "Konfiguration vollständig" : ""}</span>
+            <span class="row">${foto ? `<button class="btn klein" type="button" data-act="konfAnsicht">${k.zeige3d ? "Foto" : "3D-Ansicht"}</button>` : ""}<span class="nur3d row"><button class="btn klein" type="button" data-act="export3d" data-f="png">Bild speichern</button><button class="btn klein" type="button" data-act="export3d" data-f="glb">3D-Szene exportieren</button></span></span></div></div>
         <details class="panel regeln"><summary>Aktive Regeln (${regeln.length})</summary>
           <ul class="regelliste">${regeln.map(r => `<li><span class="mono">${r.id}</span><span>${esc(r.hinweis || E.satz(mo, r))}</span></li>`).join("") || "<li><span></span><span>Keine Einschränkungen aktiv.</span></li>"}</ul></details>
         <div class="row"><button class="btn klein" type="button" data-act="konfReset">Auswahl zurücksetzen</button><select id="konf-produkt" data-act="konfProdukt" aria-label="Grundfahrzeug wechseln">${mo.produkte.filter(x => x.aktiv !== false).map(x => `<option value="${x.id}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div>
@@ -9558,7 +9579,7 @@
     const mo = ent(); if (!mo) return St().keinEntwurf();
     const kb = K.kb; if (kb.sel && !objekt(kb.sel)) kb.sel = "";
     const leer = !mo.gruppen.length && !mo.produkte.length;
-    return `<div class="kopfzeile"><div><div class="eyebrow">Studio · Entwurf</div><h2>Katalog aufbauen</h2><p>Familien anlegen und per Drag &amp; Drop ordnen. Artikel aus dem Artikelstamm rechts auf eine Familie ziehen ergibt ein Fahrzeug, auf ein Fahrzeug ziehen ergibt Vertriebscodes. Mehrere Artikel ankreuzen und zusammen ziehen.</p></div>
+    return `<div class="kopfzeile"><div><div class="eyebrow">Studio · Entwurf</div><h2>Katalog aufbauen</h2><p>Familien anlegen und per Drag &amp; Drop ordnen. Artikel aus dem Artikelstamm rechts auf eine Familie ziehen ergibt ein Fahrzeug, auf ein Fahrzeug ziehen ergibt Vertriebscodes. Rechts Artikel suchen und mit „Übernehmen“ oder per Ziehen einfügen.</p></div>
       <div class="row"><button class="btn" type="button" data-act="kbVorschau">Vorschau im Katalog</button><a class="btn primary" href="#studio-freigabe">Freigeben</a>${ro() ? "" : `<button class="btn klein gefahr-text" type="button" data-act="kbLeeren">${kb.leeren ? "Wirklich alles leeren?" : "Neu beginnen"}</button>`}</div></div>
       ${leer ? `<div class="hinweis">Der Entwurf ist leer. Legen Sie links mit „+ Familie“ die erste Familie an, z. B. „Holztransport“.</div>` : mo.produkte.some(p => /^(ST|TB|TB3|PA|LN)$/.test(p.id)) ? `<div class="hinweis">Hier stehen noch die <b>Beispieldaten</b> (Schwertransport, Holztransport …). Mit „Neu beginnen“ starten Sie mit einem leeren Katalog. Der Vertrieb sieht weiter den alten Stand, bis Sie freigeben.</div>` : ""}
       <div class="kb-layout">${baumAnsicht(mo)}<section class="kb-mitte">${mitte(mo)}</section>${pool(mo)}</div>`;
@@ -9602,8 +9623,10 @@
       <div class="feld"><label for="kb-gbes">Beschreibung</label><textarea id="kb-gbes" rows="2" data-chg="kbGBes" ${St().dis()}>${esc(g.beschreibung || "")}</textarea></div>
       <h3>Inhalt</h3>
       ${ks.length || fs.length ? `<div class="kb-kacheln">${ks.map(k => `<button type="button" class="kb-kachel fam" data-act="kbWahl" data-s="g:${k.id}"><span>▤</span><b>${esc(k.name)}</b><small>${E.familienArtikel(mo, k.id).length} Fahrzeuge</small></button>`).join("")}
-        ${fs.map(p => `<button type="button" class="kb-kachel" data-act="kbWahl" data-s="p:${p.id}"><span class="kb-silh">${K.produktBildHtml(p, "var(--ink)")}</span><b>${esc(p.name)}</b><small><code>${esc(p.code || "")}</code> · ${codesVon(p)} Codes</small></button>`).join("")}</div>` : ""}
-      <div class="kb-ablage">Fahrzeuge aus dem Artikelstamm hierher ziehen<br><span class="gedimmt klein">oder rechts ankreuzen und „Als Fahrzeuge hinzufügen“</span></div>
+        ${fs.map(p => `<div class="kb-kachel-w${K.kb.kachelLoeschen === p.id ? " frage" : ""}"><button type="button" class="kb-kachel" data-act="kbWahl" data-s="p:${p.id}"><span class="kb-silh">${K.produktBildHtml(p, "var(--ink)")}</span><b>${esc(p.name)}</b><small><code>${esc(p.code || "")}</code> · ${codesVon(p)} Codes</small></button>
+          ${ro() ? "" : K.kb.kachelLoeschen === p.id ? `<div class="kb-kachel-frage"><span>${esc(p.name)} löschen?</span><button type="button" class="btn klein gefahr" data-act="kbKachelLoeschenOk" data-p="${p.id}">Löschen</button><button type="button" class="btn klein ghost" data-act="kbKachelLoeschen" data-p="">Abbrechen</button></div>`
+            : `<span class="kb-kachel-akt"><button type="button" class="ikon" data-act="kbWahl" data-s="p:${p.id}" title="Bearbeiten" aria-label="${esc(p.name)} bearbeiten">✎</button><button type="button" class="ikon gefahr" data-act="kbKachelLoeschen" data-p="${p.id}" title="Löschen" aria-label="${esc(p.name)} löschen">🗑</button></span>`}</div>`).join("")}</div>` : ""}
+      <div class="kb-ablage">Fahrzeuge aus dem Artikelstamm hierher ziehen<br><span class="gedimmt klein">oder rechts suchen und „als Fahrzeug“ wählen</span></div>
       ${famStruktur(mo, g)}</div>`;
   }
   /** Struktur, die alle Fahrzeuge der Familie erben */
@@ -9725,6 +9748,8 @@
   I.kbPFeld = el => { const p = objekt(K.kb.sel), k = el.dataset.k; p[k] = k === "basispreis" ? (+el.value || 0) : el.value; if (k === "basispreis" && K.Store.artikelZu(p.code)) p.apStamm = false; geaendert(`${p.name}: ${k === "basispreis" ? "Grundpreis" : k === "name" ? "Name" : "Beschreibung"} geändert`); };
   A.kbPFam = el => { const p = objekt(K.kb.sel); p.gruppe = el.value; geaendert(`${p.name} nach ${gruppe(el.value)?.name} verschoben`); };
   A.kbPAktiv = el => { const p = objekt(K.kb.sel); p.aktiv = el.checked; geaendert(`${p.name} ${el.checked ? "im Katalog sichtbar" : "ausgeblendet"}`); };
+  A.kbKachelLoeschen = el => { K.kb.kachelLoeschen = el.dataset.p || null; K.render(); };
+  A.kbKachelLoeschenOk = el => { const mo = ent(), p = E.produkt(mo, el.dataset.p); K.kb.kachelLoeschen = null; if (!p) return K.render(); E.ausGeltungEntfernen(mo, [], [p.id]); mo.produkte = mo.produkte.filter(x => x !== p); geaendert(`Fahrzeug ${p.name} gelöscht`); K.toast(`${p.name} gelöscht. Im Katalog verschwindet es mit der nächsten Freigabe.`); };
   A.kbLoeschen = () => {
     const kb = K.kb, mo = ent(); if (kb.loeschen !== kb.sel) { kb.loeschen = kb.sel; return K.render(); }
     const o = objekt(kb.sel);

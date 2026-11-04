@@ -306,7 +306,7 @@
     if (!T()) {
       platz.innerHTML = `<div class="v3d-leer">3D-Ansicht wird geladen …</div>`;
       K.lib("three").then(() => { if (platz.isConnected) { platz.innerHTML = ""; K.viewerEinhaengen(platz, mo, prod, sel); } })
-        .catch(() => { if (platz.isConnected) platz.innerHTML = `<div class="v3d-leer">Die 3D-Bibliothek ist nicht erreichbar. Konfiguration und Preise funktionieren trotzdem.</div>`; });
+        .catch(() => { if (!platz.isConnected) return; platz.innerHTML = `<div class="v3d-leer v3d-ersatz">${K.silhouette ? K.silhouette(prod?.visual?.typ, "var(--muted)") : ""}<span class="klein">Keine 3D-Ansicht verfügbar</span></div>`; platz.closest(".ansicht")?.classList.add("ohne3d"); });
       return null;
     }
     const v = K.viewer(); platz.appendChild(v.el); v.groesse(); v.zeige(mo, prod, sel); return v;

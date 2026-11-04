@@ -1091,3 +1091,21 @@
 #konfigurator .kb-silh img,#konfigurator .kachel-bild img{max-width:100%;max-height:100%;object-fit:contain}
 #konfigurator .kb-silh:has(img){height:90px;background:#fff}
 #konfigurator .bild-ersatz{display:contents}
+/* Fahrzeug-Kacheln im Katalogaufbau: Bearbeiten / Löschen */
+#konfigurator .kb-kachel-w{position:relative;display:flex}
+#konfigurator .kb-kachel-w>.kb-kachel{flex:1;min-width:0}
+#konfigurator .kb-kachel-akt{position:absolute;top:6px;right:6px;display:flex;gap:2px;opacity:0;transition:opacity .12s}
+#konfigurator .kb-kachel-w:hover .kb-kachel-akt,#konfigurator .kb-kachel-w:focus-within .kb-kachel-akt{opacity:1}
+@media (hover:none){#konfigurator .kb-kachel-akt{opacity:1}}
+#konfigurator .kb-kachel-akt .ikon{background:var(--surface);border:1px solid var(--line);border-radius:5px;width:28px;height:28px;display:grid;place-items:center;cursor:pointer;font-size:13px}
+#konfigurator .kb-kachel-frage{position:absolute;inset:auto 6px 6px 6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:var(--surface);border:1px solid var(--bad);border-radius:6px;padding:6px;font-size:12px}
+#konfigurator .kb-kachel-frage span{flex:1 0 100%;font-weight:600}
+/* Konfigurator: Foto statt 3D, Ersatz ohne 3D */
+#konfigurator .fotoplatz{display:grid;place-items:center;background:#fff}
+#konfigurator .fotoplatz img{width:100%;height:100%;object-fit:contain}
+#konfigurator .ansicht.ohne3d .nur3d,#konfigurator .ansicht.mit-foto .nur3d{display:none}
+#konfigurator .v3d-ersatz{display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center}
+#konfigurator .v3d-ersatz svg{width:min(70%,360px);height:auto;opacity:.55}
+#konfigurator .konf-leer{padding:40px 24px}
+#konfigurator .kb-preis-fehlt{font-size:13px;font-weight:500;opacity:.75}
+#konfigurator .kachel-knoepfe{gap:4px}
