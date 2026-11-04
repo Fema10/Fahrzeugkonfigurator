@@ -10,6 +10,7 @@ Stand: 04.11.2026
 | 2 | Status der Attributgruppen beim Import | 2 (freigegeben), so ist es voreingestellt | offen |
 | 3 | Namensschema | Attributklasse = Artikelnummer (max. 12 Zeichen), Attributgruppe = Klasse-ZZ-Code | offen |
 | 4 | Gemeinsame Datenhaltung im Dashboard | Tabelle oder Webdienst in APplus zum Zurückschreiben von Katalog, Vorlagen und Angeboten | offen |
+| 5 | Direkte Übertragung nach APplus statt Excel-Datenimport | Vorhandene ASMX in der APplus-Webanwendung, direkt per SQL, vorher Prüflauf mit Meldung; bei erneuter Übertragung nur ergänzen/ändern, nichts löschen | entschieden, wartet auf ASMX |
 
 ## Klärungen mit APplus / IT
 
@@ -22,11 +23,15 @@ Stand: 04.11.2026
    - Passt die Vertriebsstückliste?
 5. **Mengenpreise**: Script an der Vertriebsstücklistenposition für Zahl-Codes (z. B. Mehrlänge).
 6. **Registerkarten mit mehr als 8 Attributen**: Systemkonfiguration anpassen oder Gruppen teilen.
+7. **ASMX für die direkte Übertragung** (Rechte werden beschafft):
+   - WSDL bzw. Methodenliste
+   - Was die Methoden tun: freies SQL oder feste Methoden, Transaktion
+   - Beispielaufruf aus einem bestehenden Dashboard
+   - Lesezugriff per Abfrage auf SACHGRUPPENKLASSE, SACHGRUPPE, SACHGRUPPEPOS, SACHVORGABE, SACHWERTDLGREGEL, SDRPOS, VSTUELI, VSTUELIPOS
 
 ## Später
 
 - Testskripte als `tests/` ins Repository übernehmen, mit einem Startbefehl.
-- Rücklesen der SACH*-Tabellen zum Abgleich App ↔ APplus.
 - KONFIGOK-Attribut für vollständige Konfiguration.
 - ARTIKEL automatisch aktualisieren (Attributklasse, HASVSTUELI).
 - 3D-Modelle aus STEP nach GLB, Bauteilnamen = Feld „3D-Teil“.
