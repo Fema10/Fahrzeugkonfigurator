@@ -1,0 +1,3203 @@
+{
+ "modell": {
+  "version": 1,
+  "gruppen": [
+   {
+    "id": "schwer",
+    "name": "Schwertransport",
+    "eltern": null,
+    "merkmale": [
+     {
+      "id": "achsen",
+      "werte": null
+     },
+     {
+      "id": "lenkung",
+      "werte": null
+     },
+     {
+      "id": "federung",
+      "werte": null
+     },
+     {
+      "id": "reifen",
+      "werte": null
+     },
+     {
+      "id": "ladeflaeche",
+      "werte": null
+     },
+     {
+      "id": "breite",
+      "werte": null
+     },
+     {
+      "id": "rampen",
+      "werte": null
+     },
+     {
+      "id": "farbe",
+      "werte": null
+     },
+     {
+      "id": "zubehoer",
+      "werte": null
+     }
+    ]
+   },
+   {
+    "id": "tieflader",
+    "name": "Tiefbett-Sattelauflieger",
+    "eltern": "schwer",
+    "merkmale": [
+     {
+      "id": "achsen",
+      "werte": [
+       "a3",
+       "a4",
+       "a5",
+       "a6"
+      ]
+     },
+     {
+      "id": "ladeflaeche",
+      "werte": [
+       "l9000",
+       "tele"
+      ]
+     },
+     {
+      "id": "hals",
+      "werte": null
+     },
+     {
+      "id": "rampen",
+      "werte": [
+       "keine",
+       "hydr"
+      ]
+     }
+    ],
+    "reihenfolge": [
+     "achsen",
+     "lenkung",
+     "federung",
+     "reifen",
+     "ladeflaeche",
+     "breite",
+     "hals",
+     "rampen",
+     "farbe",
+     "zubehoer"
+    ],
+    "artikelgruppe": "FZ-TB"
+   },
+   {
+    "id": "semi",
+    "name": "Semi-Sattelauflieger",
+    "eltern": "schwer",
+    "merkmale": [
+     {
+      "id": "achsen",
+      "werte": [
+       "a2",
+       "a3",
+       "a4"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "plattform",
+    "name": "Plattform-Sattelauflieger",
+    "eltern": "schwer",
+    "merkmale": [
+     {
+      "id": "achsen",
+      "werte": [
+       "a2",
+       "a3"
+      ]
+     },
+     {
+      "id": "lenkung",
+      "werte": [
+       "starr",
+       "zwang"
+      ]
+     },
+     {
+      "id": "federung",
+      "werte": [
+       "luft"
+      ]
+     },
+     {
+      "id": "breite",
+      "werte": [
+       "b2550",
+       "b2750"
+      ]
+     },
+     {
+      "id": "rampen",
+      "werte": [
+       "keine",
+       "mech"
+      ]
+     },
+     {
+      "id": "zubehoer",
+      "werte": [
+       "zurr",
+       "rungtaschen",
+       "achslift",
+       "led",
+       "kiste"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "holz",
+    "name": "Holztransport",
+    "eltern": null,
+    "merkmale": [
+     {
+      "id": "achsen",
+      "werte": [
+       "a2",
+       "a3"
+      ]
+     },
+     {
+      "id": "lenkung",
+      "werte": [
+       "starr",
+       "zwang"
+      ]
+     },
+     {
+      "id": "reifen",
+      "werte": null
+     },
+     {
+      "id": "rungen",
+      "werte": null
+     },
+     {
+      "id": "farbe",
+      "werte": null
+     },
+     {
+      "id": "zubehoer",
+      "werte": [
+       "achslift",
+       "led",
+       "kiste"
+      ]
+     }
+    ]
+   },
+   {
+    "id": "nachlaeufer",
+    "name": "Nachläufer-Kombination",
+    "eltern": "holz",
+    "merkmale": []
+   }
+  ],
+  "merkmale": [
+   {
+    "id": "achsen",
+    "name": "Achsanzahl",
+    "abschnitt": "Fahrwerk",
+    "typ": "einfach",
+    "werte": [
+     {
+      "id": "a2",
+      "name": "2 Achsen",
+      "preis": 0,
+      "kosten": 0,
+      "menge": 2,
+      "teil": "achsen_2",
+      "stl": [
+       [
+        "AC-10T-100",
+        "Achsaggregat 10 t, Scheibenbremse",
+        2,
+        "Stk"
+       ]
+      ],
+      "code": "A2"
+     },
+     {
+      "id": "a3",
+      "name": "3 Achsen",
+      "preis": 6800,
+      "kosten": 4900,
+      "menge": 3,
+      "teil": "achsen_3",
+      "stl": [
+       [
+        "AC-10T-100",
+        "Achsaggregat 10 t, Scheibenbremse",
+        3,
+        "Stk"
+       ]
+      ],
+      "code": "A3"
+     },
+     {
+      "id": "a4",
+      "name": "4 Achsen",
+      "preis": 14500,
+      "kosten": 10400,
+      "menge": 4,
+      "teil": "achsen_4",
+      "stl": [
+       [
+        "AC-10T-100",
+        "Achsaggregat 10 t, Scheibenbremse",
+        4,
+        "Stk"
+       ]
+      ],
+      "code": "A4"
+     },
+     {
+      "id": "a5",
+      "name": "5 Achsen",
+      "preis": 23800,
+      "kosten": 17100,
+      "menge": 5,
+      "teil": "achsen_5",
+      "stl": [
+       [
+        "AC-10T-100",
+        "Achsaggregat 10 t, Scheibenbremse",
+        5,
+        "Stk"
+       ]
+      ],
+      "code": "A5"
+     },
+     {
+      "id": "a6",
+      "name": "6 Achsen",
+      "preis": 33500,
+      "kosten": 24100,
+      "menge": 6,
+      "teil": "achsen_6",
+      "stl": [
+       [
+        "AC-10T-100",
+        "Achsaggregat 10 t, Scheibenbremse",
+        6,
+        "Stk"
+       ]
+      ],
+      "code": "A6"
+     }
+    ],
+    "darstellung": "kacheln",
+    "katalogfilter": true,
+    "code": "ACH",
+    "info": "Anzahl der Achsen im Achsaggregat",
+    "bereich": "Grundmaschine"
+   },
+   {
+    "id": "lenkung",
+    "name": "Lenkung",
+    "abschnitt": "Fahrwerk",
+    "typ": "einfach",
+    "werte": [
+     {
+      "id": "starr",
+      "name": "Starrachsen",
+      "preis": 0,
+      "kosten": 0,
+      "teil": "lenkung_starr",
+      "stl": [],
+      "code": "L0"
+     },
+     {
+      "id": "zwang",
+      "name": "Zwangslenkung mechanisch",
+      "preis": 8900,
+      "kosten": 6200,
+      "teil": "lenkung_zwang",
+      "stl": [
+       [
+        "LK-ZW-100",
+        "Zwangslenkung mit Drehschemelabnahme",
+        1,
+        "Satz"
+       ]
+      ],
+      "code": "LZM"
+     },
+     {
+      "id": "hydr",
+      "name": "Hydraulische Zwangslenkung",
+      "preis": 18500,
+      "kosten": 12900,
+      "teil": "lenkung_hydr",
+      "stl": [
+       [
+        "LK-HY-200",
+        "Lenkhydraulik komplett",
+        1,
+        "Satz"
+       ],
+       [
+        "LK-HY-210",
+        "Lenkzylinder",
+        2,
+        "Stk"
+       ]
+      ],
+      "code": "LZH"
+     }
+    ],
+    "darstellung": "liste",
+    "code": "LNK",
+    "bereich": "Grundmaschine"
+   },
+   {
+    "id": "federung",
+    "name": "Federung",
+    "abschnitt": "Fahrwerk",
+    "typ": "einfach",
+    "multiplikator": "achsen",
+    "werte": [
+     {
+      "id": "luft",
+      "name": "Luftfederung",
+      "preis": 0,
+      "kosten": 0,
+      "stl": [
+       [
+        "FE-LU-010",
+        "Luftfederbalg",
+        2,
+        "Stk"
+       ]
+      ],
+      "code": "FL"
+     },
+     {
+      "id": "hydro",
+      "name": "Hydraulische Pendelachsen, Hub 300 mm",
+      "preis": 4200,
+      "kosten": 3000,
+      "teil": "pendel",
+      "stl": [
+       [
+        "FE-HP-020",
+        "Pendelachse hydraulisch",
+        2,
+        "Stk"
+       ]
+      ],
+      "code": "FPH"
+     }
+    ],
+    "darstellung": "liste",
+    "code": "FED",
+    "bereich": "Grundmaschine"
+   },
+   {
+    "id": "reifen",
+    "name": "Bereifung",
+    "abschnitt": "Fahrwerk",
+    "typ": "einfach",
+    "multiplikator": "achsen",
+    "werte": [
+     {
+      "id": "r175",
+      "name": "235/75 R17,5 zwillingsbereift",
+      "preis": 0,
+      "kosten": 0,
+      "stl": [
+       [
+        "RF-175-235",
+        "Kompletrad 235/75 R17,5",
+        4,
+        "Stk"
+       ]
+      ],
+      "code": "R175"
+     },
+     {
+      "id": "r195",
+      "name": "245/70 R19,5 zwillingsbereift",
+      "preis": 380,
+      "kosten": 260,
+      "stl": [
+       [
+        "RF-195-245",
+        "Kompletrad 245/70 R19,5",
+        4,
+        "Stk"
+       ]
+      ],
+      "code": "R195"
+     },
+     {
+      "id": "r225",
+      "name": "385/65 R22,5 Super Single",
+      "preis": 720,
+      "kosten": 500,
+      "stl": [
+       [
+        "RF-225-385",
+        "Kompletrad 385/65 R22,5",
+        2,
+        "Stk"
+       ]
+      ],
+      "code": "R225"
+     }
+    ],
+    "darstellung": "auswahl",
+    "code": "BER",
+    "bereich": "Grundmaschine"
+   },
+   {
+    "id": "ladeflaeche",
+    "name": "Ladefläche",
+    "abschnitt": "Tiefbett-Plattform",
+    "typ": "einfach",
+    "werte": [
+     {
+      "id": "l9000",
+      "name": "9.000 mm",
+      "preis": 0,
+      "kosten": 0,
+      "stl": [
+       [
+        "BO-HZ-090",
+        "Hartholzboden 50 mm, 9 m",
+        1,
+        "Satz"
+       ]
+      ],
+      "code": "LF090"
+     },
+     {
+      "id": "l11500",
+      "name": "11.500 mm",
+      "preis": 3200,
+      "kosten": 2300,
+      "stl": [
+       [
+        "BO-HZ-115",
+        "Hartholzboden 50 mm, 11,5 m",
+        1,
+        "Satz"
+       ]
+      ],
+      "code": "LF115"
+     },
+     {
+      "id": "tele",
+      "name": "9.000 mm, teleskopierbar auf 15.000 mm",
+      "preis": 12900,
+      "kosten": 9100,
+      "teil": "teleskop",
+      "stl": [
+       [
+        "BO-HZ-090",
+        "Hartholzboden 50 mm, 9 m",
+        1,
+        "Satz"
+       ],
+       [
+        "RA-TE-600",
+        "Teleskopauszug 6 m",
+        1,
+        "Stk"
+       ]
+      ],
+      "code": "LFT150"
+     }
+    ],
+    "darstellung": "auswahl",
+    "pflicht": true,
+    "code": "LAD",
+    "bereich": "Grundmaschine"
+   },
+   {
+    "id": "breite",
+    "name": "Breite",
+    "abschnitt": "Tiefbett-Plattform",
+    "typ": "einfach",
+    "werte": [
+     {
+      "id": "b2550",
+      "name": "2.550 mm",
+      "preis": 0,
+      "kosten": 0,
+      "stl": [],
+      "code": "B255"
+     },
+     {
+      "id": "b2750",
+      "name": "2.750 mm",
+      "preis": 900,
+      "kosten": 600,
+      "stl": [
+       [
+        "RA-BR-275",
+        "Außenrahmen 2.750 mm",
+        1,
+        "Satz"
+       ]
+      ],
+      "code": "B275"
+     },
+     {
+      "id": "b3300",
+      "name": "Verbreiterbar auf 3.300 mm",
+      "preis": 4600,
+      "kosten": 3100,
+      "teil": "verbreiterung",
+      "stl": [
+       [
+        "RA-VB-330",
+        "Ausziehbare Verbreiterung",
+        8,
+        "Stk"
+       ]
+      ],
+      "code": "B330V"
+     }
+    ],
+    "darstellung": "liste",
+    "code": "BRT",
+    "bereich": "Grundmaschine"
+   },
+   {
+    "id": "hals",
+    "name": "Schwanenhals",
+    "abschnitt": "Schwanenhals-Typ",
+    "typ": "einfach",
+    "werte": [
+     {
+      "id": "fest",
+      "name": "Fest",
+      "preis": 0,
+      "kosten": 0,
+      "stl": [],
+      "code": "SH-F"
+     },
+     {
+      "id": "abnehmbar",
+      "name": "Hydraulisch abnehmbar",
+      "preis": 16800,
+      "kosten": 11900,
+      "teil": "hals_abnehmbar",
+      "stl": [
+       [
+        "HA-HY-300",
+        "Abnehmbarer Schwanenhals, hydraulisch",
+        1,
+        "Stk"
+       ],
+       [
+        "HY-AG-050",
+        "Hydraulikaggregat 5,5 kW",
+        1,
+        "Stk"
+       ]
+      ],
+      "code": "SH-AH"
+     }
+    ],
+    "darstellung": "kacheln",
+    "pflicht": true,
+    "code": "SHT",
+    "info": "Fest oder hydraulisch abnehmbar für Beladung von vorn",
+    "bereich": "Grundmaschine"
+   },
+   {
+    "id": "rampen",
+    "name": "Auffahrrampen",
+    "abschnitt": "Heck",
+    "typ": "einfach",
+    "werte": [
+     {
+      "id": "keine",
+      "name": "Keine",
+      "preis": 0,
+      "kosten": 0,
+      "stl": [],
+      "code": "RA0"
+     },
+     {
+      "id": "mech",
+      "name": "Mechanisch klappbar",
+      "preis": 2900,
+      "kosten": 1900,
+      "teil": "rampen",
+      "stl": [
+       [
+        "RP-ME-220",
+        "Auffahrrampe 2,2 m, federunterstützt",
+        2,
+        "Stk"
+       ]
+      ],
+      "code": "RAM"
+     },
+     {
+      "id": "hydr",
+      "name": "Hydraulisch klappbar",
+      "preis": 6400,
+      "kosten": 4300,
+      "teil": "rampen_hydr",
+      "stl": [
+       [
+        "RP-HY-220",
+        "Auffahrrampe 2,2 m, hydraulisch",
+        2,
+        "Stk"
+       ],
+       [
+        "HY-ZY-080",
+        "Hydraulikzylinder Rampe",
+        2,
+        "Stk"
+       ]
+      ],
+      "code": "RAH"
+     },
+     {
+      "id": "hydrv",
+      "name": "Hydraulisch, seitlich verschiebbar",
+      "preis": 8900,
+      "kosten": 6100,
+      "teil": "rampen_verschiebbar",
+      "stl": [
+       [
+        "RP-HY-220",
+        "Auffahrrampe 2,2 m, hydraulisch",
+        2,
+        "Stk"
+       ],
+       [
+        "HY-ZY-080",
+        "Hydraulikzylinder Rampe",
+        2,
+        "Stk"
+       ],
+       [
+        "RP-VS-010",
+        "Verschiebeeinrichtung",
+        1,
+        "Stk"
+       ]
+      ],
+      "code": "RAHV",
+      "info": "Rampen lassen sich seitlich verschieben, für Maschinen mit schmaler Spur"
+     }
+    ],
+    "darstellung": "kacheln",
+    "code": "RMP",
+    "bereich": "Grundmaschine"
+   },
+   {
+    "id": "rungen",
+    "name": "Rungenpaare",
+    "abschnitt": "Holzaufbau",
+    "typ": "einfach",
+    "werte": [
+     {
+      "id": "rp2",
+      "name": "2 Rungenpaare",
+      "preis": 0,
+      "kosten": 0,
+      "stl": [
+       [
+        "RU-HO-180",
+        "Rungenpaar 1.800 mm",
+        2,
+        "Stk"
+       ]
+      ],
+      "code": "RP2"
+     },
+     {
+      "id": "rp3",
+      "name": "3 Rungenpaare",
+      "preis": 1450,
+      "kosten": 980,
+      "stl": [
+       [
+        "RU-HO-180",
+        "Rungenpaar 1.800 mm",
+        3,
+        "Stk"
+       ]
+      ],
+      "code": "RP3"
+     },
+     {
+      "id": "rp4",
+      "name": "4 Rungenpaare",
+      "preis": 2900,
+      "kosten": 1960,
+      "stl": [
+       [
+        "RU-HO-180",
+        "Rungenpaar 1.800 mm",
+        4,
+        "Stk"
+       ]
+      ],
+      "code": "RP4"
+     }
+    ],
+    "darstellung": "liste",
+    "code": "RNG",
+    "bereich": "Grundmaschine"
+   },
+   {
+    "id": "farbe",
+    "name": "Farbe",
+    "abschnitt": "Lackierung",
+    "typ": "einfach",
+    "werte": [
+     {
+      "id": "r9005",
+      "name": "RAL 9005 Tiefschwarz",
+      "preis": 0,
+      "kosten": 0,
+      "hex": "#141416",
+      "stl": [
+       [
+        "LA-9005",
+        "Lackierung RAL 9005",
+        1,
+        "Satz"
+       ]
+      ],
+      "code": "RAL9005"
+     },
+     {
+      "id": "r3000",
+      "name": "RAL 3000 Feuerrot",
+      "preis": 0,
+      "kosten": 0,
+      "hex": "#AF2B1E",
+      "stl": [
+       [
+        "LA-3000",
+        "Lackierung RAL 3000",
+        1,
+        "Satz"
+       ]
+      ],
+      "code": "RAL3000"
+     },
+     {
+      "id": "r5010",
+      "name": "RAL 5010 Enzianblau",
+      "preis": 0,
+      "kosten": 0,
+      "hex": "#0E4C92",
+      "stl": [
+       [
+        "LA-5010",
+        "Lackierung RAL 5010",
+        1,
+        "Satz"
+       ]
+      ],
+      "code": "RAL5010"
+     },
+     {
+      "id": "r7016",
+      "name": "RAL 7016 Anthrazitgrau",
+      "preis": 0,
+      "kosten": 0,
+      "hex": "#383E42",
+      "stl": [
+       [
+        "LA-7016",
+        "Lackierung RAL 7016",
+        1,
+        "Satz"
+       ]
+      ],
+      "code": "RAL7016"
+     },
+     {
+      "id": "r1028",
+      "name": "RAL 1028 Melonengelb",
+      "preis": 650,
+      "kosten": 420,
+      "hex": "#F4A900",
+      "stl": [
+       [
+        "LA-1028",
+        "Lackierung RAL 1028",
+        1,
+        "Satz"
+       ]
+      ],
+      "code": "RAL1028"
+     }
+    ],
+    "darstellung": "kacheln",
+    "bereich": "Optionen",
+    "code": "LCK"
+   },
+   {
+    "id": "zubehoer",
+    "name": "Ausstattung",
+    "abschnitt": "Ausstattung",
+    "typ": "mehrfach",
+    "werte": [
+     {
+      "id": "zurr",
+      "name": "Zurrpunkte 10 t, 20 Stück",
+      "preis": 1150,
+      "kosten": 690,
+      "stl": [
+       [
+        "ZU-ZP-100",
+        "Zurrpunkt 10 t",
+        20,
+        "Stk"
+       ]
+      ],
+      "code": "Z-ZP20"
+     },
+     {
+      "id": "rungtaschen",
+      "name": "Rungentaschen mit 10 Stahlrungen",
+      "preis": 1900,
+      "kosten": 1200,
+      "teil": "rungen_seite",
+      "stl": [
+       [
+        "ZU-RT-010",
+        "Rungentasche",
+        10,
+        "Stk"
+       ],
+       [
+        "ZU-RS-080",
+        "Stahlrunge 800 mm",
+        10,
+        "Stk"
+       ]
+      ],
+      "code": "Z-RT10"
+     },
+     {
+      "id": "winde",
+      "name": "Seilwinde 12 t",
+      "preis": 6900,
+      "kosten": 4800,
+      "teil": "winde",
+      "stl": [
+       [
+        "ZU-SW-120",
+        "Seilwinde hydraulisch 12 t",
+        1,
+        "Stk"
+       ]
+      ],
+      "code": "Z-SW12"
+     },
+     {
+      "id": "achslift",
+      "name": "Achslift 1. Achse",
+      "preis": 1600,
+      "kosten": 1050,
+      "teil": "achslift",
+      "stl": [
+       [
+        "ZU-AL-001",
+        "Achslifteinrichtung",
+        1,
+        "Stk"
+       ]
+      ],
+      "code": "Z-AL1"
+     },
+     {
+      "id": "led",
+      "name": "LED-Beleuchtung komplett",
+      "preis": 980,
+      "kosten": 610,
+      "teil": "led",
+      "stl": [
+       [
+        "EL-LED-100",
+        "LED-Leuchtenpaket",
+        1,
+        "Satz"
+       ]
+      ],
+      "code": "Z-LED"
+     },
+     {
+      "id": "stuetz",
+      "name": "Hydraulische Stützfüße",
+      "preis": 3400,
+      "kosten": 2350,
+      "teil": "stuetzfuesse",
+      "stl": [
+       [
+        "ZU-SF-200",
+        "Stützfuß hydraulisch",
+        2,
+        "Stk"
+       ]
+      ],
+      "code": "Z-SFH"
+     },
+     {
+      "id": "kiste",
+      "name": "Werkzeugkasten",
+      "preis": 420,
+      "kosten": 240,
+      "teil": "werkzeugkasten",
+      "stl": [
+       [
+        "ZU-WK-060",
+        "Werkzeugkasten 600 mm",
+        1,
+        "Stk"
+       ]
+      ],
+      "code": "Z-WK"
+     }
+    ],
+    "darstellung": "option",
+    "bereich": "Optionen",
+    "code": "ZUB"
+   }
+  ],
+  "produkte": [
+   {
+    "id": "ST",
+    "name": "Semitieflader ST",
+    "gruppe": "semi",
+    "artnr": "FZ-ST-000",
+    "basispreis": 48900,
+    "basiskosten": 35600,
+    "aktiv": true,
+    "beschreibung": "Für Baumaschinen und Stapler bis 40 t. Niedrige Ladehöhe, Auffahrt über das Heck.",
+    "visual": {
+     "typ": "semi",
+     "asset": null
+    },
+    "stl": [
+     [
+      "RA-ST-100",
+      "Rahmen Semitieflader, geschweißt",
+      1,
+      "Stk"
+     ],
+     [
+      "KP-200",
+      "Königszapfen 2\"",
+      1,
+      "Stk"
+     ],
+     [
+      "EL-24-100",
+      "Elektrik 24 V Grundausstattung",
+      1,
+      "Satz"
+     ],
+     [
+      "MO-ST-001",
+      "Montage und Endabnahme",
+      38,
+      "h"
+     ]
+    ],
+    "merkmale": [],
+    "code": "SEMI_ST3_S3F"
+   },
+   {
+    "id": "TB",
+    "name": "Tiefbett-Auflieger TB",
+    "gruppe": "tieflader",
+    "artnr": "FZ-TB-000",
+    "basispreis": 79500,
+    "basiskosten": 58200,
+    "aktiv": true,
+    "beschreibung": "Für hohe Maschinen und Transformatoren. Tiefbett mit 450 mm Ladehöhe.",
+    "visual": {
+     "typ": "tiefbett",
+     "asset": null
+    },
+    "stl": [
+     [
+      "RA-TB-100",
+      "Rahmen Tiefbett, geschweißt",
+      1,
+      "Stk"
+     ],
+     [
+      "KP-350",
+      "Königszapfen 3,5\"",
+      1,
+      "Stk"
+     ],
+     [
+      "EL-24-100",
+      "Elektrik 24 V Grundausstattung",
+      1,
+      "Satz"
+     ],
+     [
+      "MO-TB-001",
+      "Montage und Endabnahme",
+      64,
+      "h"
+     ]
+    ],
+    "merkmale": [],
+    "code": "TB_T4P_S3F"
+   },
+   {
+    "id": "TB3",
+    "name": "Tiefbett-Auflieger TB 3",
+    "gruppe": "tieflader",
+    "artnr": "FZ-TB-000",
+    "basispreis": 71900,
+    "basiskosten": 52800,
+    "aktiv": true,
+    "beschreibung": "Dreiachsige Tiefbett-Ausführung für Baumaschinen bis 45 t.",
+    "visual": {
+     "typ": "tiefbett",
+     "asset": null
+    },
+    "stl": [
+     [
+      "RA-TB-100",
+      "Rahmen Tiefbett, geschweißt",
+      1,
+      "Stk"
+     ],
+     [
+      "KP-350",
+      "Königszapfen 3,5\"",
+      1,
+      "Stk"
+     ],
+     [
+      "EL-24-100",
+      "Elektrik 24 V Grundausstattung",
+      1,
+      "Satz"
+     ],
+     [
+      "MO-TB-001",
+      "Montage und Endabnahme",
+      64,
+      "h"
+     ]
+    ],
+    "merkmale": [
+     {
+      "id": "achsen",
+      "werte": [
+       "a3"
+      ]
+     }
+    ],
+    "code": "TB_T3P_S3F"
+   },
+   {
+    "id": "PA",
+    "name": "Plattform-Auflieger PA",
+    "gruppe": "plattform",
+    "artnr": "FZ-PA-000",
+    "basispreis": 36500,
+    "basiskosten": 26900,
+    "aktiv": true,
+    "beschreibung": "Ebene Ladefläche für Stahl, Betonfertigteile und Langgut.",
+    "visual": {
+     "typ": "plattform",
+     "asset": null
+    },
+    "stl": [
+     [
+      "RA-PA-100",
+      "Rahmen Plattform, geschweißt",
+      1,
+      "Stk"
+     ],
+     [
+      "KP-200",
+      "Königszapfen 2\"",
+      1,
+      "Stk"
+     ],
+     [
+      "EL-24-100",
+      "Elektrik 24 V Grundausstattung",
+      1,
+      "Satz"
+     ],
+     [
+      "MO-PA-001",
+      "Montage und Endabnahme",
+      30,
+      "h"
+     ]
+    ],
+    "merkmale": [],
+    "code": "PLAT_PA2_FL"
+   },
+   {
+    "id": "LN",
+    "name": "Langholz-Nachläufer LN",
+    "gruppe": "nachlaeufer",
+    "artnr": "FZ-LN-000",
+    "basispreis": 29800,
+    "basiskosten": 21400,
+    "aktiv": true,
+    "beschreibung": "Teleskopierbarer Nachläufer für Langholz bis 32 m Gesamtlänge.",
+    "visual": {
+     "typ": "nachlaeufer",
+     "asset": null
+    },
+    "stl": [
+     [
+      "RA-LN-100",
+      "Teleskoprohr mit Drehschemel",
+      1,
+      "Stk"
+     ],
+     [
+      "EL-24-100",
+      "Elektrik 24 V Grundausstattung",
+      1,
+      "Satz"
+     ],
+     [
+      "MO-LN-001",
+      "Montage und Endabnahme",
+      22,
+      "h"
+     ]
+    ],
+    "merkmale": [],
+    "code": "NL_LN2_T"
+   }
+  ],
+  "regeln": [
+   {
+    "id": "R01",
+    "name": "Pendelachsen brauchen Hydrauliklenkung",
+    "aktiv": true,
+    "produkte": [],
+    "wenn": [
+     {
+      "merkmal": "federung",
+      "op": "ist",
+      "werte": [
+       "hydro"
+      ]
+     }
+    ],
+    "dann": {
+     "typ": "nurErlauben",
+     "merkmal": "lenkung",
+     "werte": [
+      "hydr"
+     ]
+    },
+    "hinweis": "Pendelachsen werden immer mit hydraulischer Zwangslenkung ausgeliefert."
+   },
+   {
+    "id": "R02",
+    "name": "Ab 5 Achsen keine Starrachsen",
+    "aktiv": true,
+    "produkte": [],
+    "wenn": [
+     {
+      "merkmal": "achsen",
+      "op": "ist",
+      "werte": [
+       "a5",
+       "a6"
+      ]
+     }
+    ],
+    "dann": {
+     "typ": "sperren",
+     "merkmal": "lenkung",
+     "werte": [
+      "starr"
+     ]
+    },
+    "hinweis": "Mit 5 oder 6 Achsen ist der Reifenverschleiß ohne Lenkung zu hoch."
+   },
+   {
+    "id": "R03",
+    "name": "Pendelachsen nur mit 17,5 Zoll",
+    "aktiv": true,
+    "produkte": [],
+    "wenn": [
+     {
+      "merkmal": "federung",
+      "op": "ist",
+      "werte": [
+       "hydro"
+      ]
+     }
+    ],
+    "dann": {
+     "typ": "nurErlauben",
+     "merkmal": "reifen",
+     "werte": [
+      "r175"
+     ]
+    },
+    "hinweis": "Pendelachsen sind für 17,5\"-Bereifung ausgelegt."
+   },
+   {
+    "id": "R04",
+    "name": "Teleskop ohne verschiebbare Rampen",
+    "aktiv": true,
+    "produkte": [],
+    "wenn": [
+     {
+      "merkmal": "ladeflaeche",
+      "op": "ist",
+      "werte": [
+       "tele"
+      ]
+     }
+    ],
+    "dann": {
+     "typ": "sperren",
+     "merkmal": "rampen",
+     "werte": [
+      "hydrv"
+     ]
+    },
+    "hinweis": ""
+   },
+   {
+    "id": "R05",
+    "name": "Abnehmbarer Hals: Beladung von vorn",
+    "aktiv": true,
+    "produkte": [],
+    "wenn": [
+     {
+      "merkmal": "hals",
+      "op": "ist",
+      "werte": [
+       "abnehmbar"
+      ]
+     }
+    ],
+    "dann": {
+     "typ": "nurErlauben",
+     "merkmal": "rampen",
+     "werte": [
+      "keine"
+     ]
+    },
+    "hinweis": "Mit abnehmbarem Schwanenhals wird von vorn beladen, Heckrampen entfallen.",
+    "gruppen": [
+     "tieflader"
+    ]
+   },
+   {
+    "id": "R06",
+    "name": "Seilwinde nur mit festem Hals",
+    "aktiv": true,
+    "produkte": [],
+    "wenn": [
+     {
+      "merkmal": "hals",
+      "op": "ist",
+      "werte": [
+       "abnehmbar"
+      ]
+     }
+    ],
+    "dann": {
+     "typ": "sperren",
+     "merkmal": "zubehoer",
+     "werte": [
+      "winde"
+     ]
+    },
+    "hinweis": ""
+   },
+   {
+    "id": "R07",
+    "name": "Verbreiterung erst ab 3 Achsen",
+    "aktiv": true,
+    "produkte": [],
+    "wenn": [
+     {
+      "merkmal": "achsen",
+      "op": "ist",
+      "werte": [
+       "a2"
+      ]
+     }
+    ],
+    "dann": {
+     "typ": "sperren",
+     "merkmal": "breite",
+     "werte": [
+      "b3300"
+     ]
+    },
+    "hinweis": ""
+   },
+   {
+    "id": "R08",
+    "name": "Achslift nur mit Luftfederung",
+    "aktiv": true,
+    "produkte": [],
+    "wenn": [
+     {
+      "merkmal": "federung",
+      "op": "ist",
+      "werte": [
+       "hydro"
+      ]
+     }
+    ],
+    "dann": {
+     "typ": "sperren",
+     "merkmal": "zubehoer",
+     "werte": [
+      "achslift"
+     ]
+    },
+    "hinweis": ""
+   },
+   {
+    "id": "R09",
+    "name": "4 Rungenpaare brauchen 3 Achsen",
+    "aktiv": true,
+    "produkte": [
+     "LN"
+    ],
+    "wenn": [
+     {
+      "merkmal": "achsen",
+      "op": "ist",
+      "werte": [
+       "a2"
+      ]
+     }
+    ],
+    "dann": {
+     "typ": "sperren",
+     "merkmal": "rungen",
+     "werte": [
+      "rp4"
+     ]
+    },
+    "hinweis": ""
+   },
+   {
+    "id": "R10",
+    "name": "Achslift ab 3 Achsen",
+    "aktiv": true,
+    "produkte": [],
+    "wenn": [
+     {
+      "merkmal": "achsen",
+      "op": "ist",
+      "werte": [
+       "a2"
+      ]
+     }
+    ],
+    "dann": {
+     "typ": "sperren",
+     "merkmal": "zubehoer",
+     "werte": [
+      "achslift"
+     ]
+    },
+    "hinweis": ""
+   },
+   {
+    "id": "R11",
+    "name": "Melonengelb nur für Schwerlast (Entwurf)",
+    "aktiv": false,
+    "produkte": [],
+    "wenn": [
+     {
+      "merkmal": "achsen",
+      "op": "ist",
+      "werte": [
+       "a2",
+       "a3"
+      ]
+     }
+    ],
+    "dann": {
+     "typ": "sperren",
+     "merkmal": "farbe",
+     "werte": [
+      "r1028"
+     ]
+    },
+    "hinweis": "Noch nicht abgestimmt."
+   },
+   {
+    "id": "T01",
+    "name": "Bereifung nach Achsanzahl",
+    "aktiv": true,
+    "typ": "tabelle",
+    "produkte": [],
+    "gruppen": [
+     "tieflader"
+    ],
+    "tabelle": {
+     "merkmale": [
+      "achsen",
+      "reifen"
+     ],
+     "zeilen": [
+      [
+       "a3",
+       "r175"
+      ],
+      [
+       "a3",
+       "r195"
+      ],
+      [
+       "a3",
+       "r225"
+      ],
+      [
+       "a4",
+       "r175"
+      ],
+      [
+       "a4",
+       "r195"
+      ],
+      [
+       "a4",
+       "r225"
+      ],
+      [
+       "a5",
+       "r175"
+      ],
+      [
+       "a6",
+       "r175"
+      ]
+     ]
+    }
+   },
+   {
+    "id": "R12",
+    "name": "Abnehmbarer Hals braucht Stützfüße",
+    "aktiv": true,
+    "produkte": [],
+    "wenn": [
+     {
+      "merkmal": "hals",
+      "op": "ist",
+      "werte": [
+       "abnehmbar"
+      ]
+     }
+    ],
+    "dann": {
+     "typ": "setzen",
+     "merkmal": "zubehoer",
+     "werte": [
+      "stuetz"
+     ]
+    },
+    "hinweis": "Zum Abkuppeln des Schwanenhalses werden hydraulische Stützfüße benötigt."
+   }
+  ]
+ },
+ "einstellungen": {
+  "firma": {
+   "name": "Muster Fahrzeugbau GmbH",
+   "strasse": "Industriestraße 12",
+   "ort": "77656 Musterstadt",
+   "tel": "+49 781 000 00-0",
+   "web": "www.muster-fahrzeugbau.example",
+   "ustid": "DE000000000"
+  },
+  "vertrieb": [
+   {
+    "id": "v1",
+    "name": "Jana Weber",
+    "tel": "+49 781 000 00-21",
+    "mail": "j.weber@muster-fahrzeugbau.example"
+   },
+   {
+    "id": "v2",
+    "name": "Markus Hahn",
+    "tel": "+49 781 000 00-24",
+    "mail": "m.hahn@muster-fahrzeugbau.example"
+   }
+  ],
+  "mwst": 19,
+  "praefix": "AN-2026-",
+  "naechsteNr": 1047,
+  "gueltigTage": 30,
+  "vorlage": {
+   "einleitung": "Sehr geehrte Damen und Herren,\nvielen Dank für Ihre Anfrage. Gern bieten wir Ihnen die folgenden Fahrzeuge nach Ihren Vorgaben an.",
+   "lieferung": "Lieferzeit ca. 14 Wochen nach Auftragsklärung. Lieferung ab Werk, Überführung auf Wunsch.",
+   "zahlung": "30 % Anzahlung bei Auftragserteilung, Rest bei Abholung bzw. vor Auslieferung.",
+   "gewaehrleistung": "12 Monate Gewährleistung auf Fahrzeug und Aufbau, 24 Monate auf Achsaggregate.",
+   "schluss": "Wir freuen uns auf Ihren Auftrag. Für Rückfragen steht Ihnen {{bearbeiter.name}} unter {{bearbeiter.tel}} gern zur Verfügung.",
+   "zeigeMerkmalpreise": true,
+   "zeigeBild": true,
+   "zeigeStueckliste": false
+  }
+ },
+ "kunden": [
+  {
+   "id": "k10231",
+   "nr": "10231",
+   "firma": "Brenner Logistik GmbH",
+   "person": "Herr Tobias Brenner",
+   "strasse": "Hafenstraße 8",
+   "ort": "77694 Kehl",
+   "land": "DE",
+   "mail": "t.brenner@brenner-logistik.example",
+   "tel": "+49 7851 000 11",
+   "notiz": "Rahmenvertrag Wartung bis 2027."
+  },
+  {
+   "id": "k10457",
+   "nr": "10457",
+   "firma": "Kaiser Kran & Schwertransporte GmbH",
+   "person": "Frau Melanie Kaiser",
+   "strasse": "Werkstraße 3",
+   "ort": "77933 Lahr",
+   "land": "DE",
+   "mail": "m.kaiser@kaiser-schwertransporte.example",
+   "tel": "+49 7821 000 22",
+   "notiz": "Flotte: 14 Tieflader, Ersatz 2027 geplant."
+  },
+  {
+   "id": "k10512",
+   "nr": "10512",
+   "firma": "Forstbetrieb Hofmann KG",
+   "person": "Herr Stefan Hofmann",
+   "strasse": "Waldweg 21",
+   "ort": "77709 Wolfach",
+   "land": "DE",
+   "mail": "s.hofmann@forst-hofmann.example",
+   "tel": "+49 7834 000 33",
+   "notiz": ""
+  },
+  {
+   "id": "k10603",
+   "nr": "10603",
+   "firma": "Bauunternehmung Ruf GmbH & Co. KG",
+   "person": "Herr Daniel Ruf",
+   "strasse": "Gewerbepark 5",
+   "ort": "79098 Freiburg",
+   "land": "DE",
+   "mail": "d.ruf@ruf-bau.example",
+   "tel": "+49 761 000 44",
+   "notiz": ""
+  },
+  {
+   "id": "k10688",
+   "nr": "10688",
+   "firma": "Nordsee Anlagenbau AG",
+   "person": "Frau Ines Petersen",
+   "strasse": "Am Kai 14",
+   "ort": "26382 Wilhelmshaven",
+   "land": "DE",
+   "mail": "i.petersen@nordsee-anlagenbau.example",
+   "tel": "+49 4421 000 55",
+   "notiz": "Projekt Umspannwerk, Transformatoren bis 120 t."
+  }
+ ],
+ "angebote": [
+  {
+   "nr": "AN-2026-1043",
+   "kundeId": "k10457",
+   "kunde": {
+    "firma": "Kaiser Kran & Schwertransporte GmbH",
+    "person": "Frau Melanie Kaiser",
+    "strasse": "Werkstraße 3",
+    "ort": "77933 Lahr",
+    "mail": "m.kaiser@kaiser-schwertransporte.example"
+   },
+   "bearbeiter": "v1",
+   "erstellt": 1792931508092,
+   "gueltig": 1795523508092,
+   "status": "versendet",
+   "positionen": [
+    {
+     "typ": "konfig",
+     "produkt": "ST",
+     "produktName": "Semitieflader ST",
+     "sel": {
+      "achsen": "a3",
+      "lenkung": "zwang",
+      "federung": "luft",
+      "reifen": "r195",
+      "ladeflaeche": "l11500",
+      "breite": "b3300",
+      "rampen": "hydrv",
+      "farbe": "r3000",
+      "zubehoer": [
+       "zurr",
+       "led",
+       "stuetz"
+      ]
+     },
+     "zeilen": [
+      {
+       "mid": "_basis",
+       "merkmal": "Grundfahrzeug",
+       "text": "Semitieflader ST",
+       "preis": 48900,
+       "kosten": 35600
+      },
+      {
+       "mid": "achsen",
+       "wid": "a3",
+       "code": "A3",
+       "merkmal": "Achsanzahl",
+       "ueberschrift": "Fahrwerk",
+       "text": "3 Achsen",
+       "preis": 6800,
+       "kosten": 4900
+      },
+      {
+       "mid": "lenkung",
+       "wid": "zwang",
+       "code": "LZM",
+       "merkmal": "Lenkung",
+       "ueberschrift": "Fahrwerk",
+       "text": "Zwangslenkung mechanisch",
+       "preis": 8900,
+       "kosten": 6200
+      },
+      {
+       "mid": "federung",
+       "wid": "luft",
+       "code": "FL",
+       "merkmal": "Federung",
+       "ueberschrift": "Fahrwerk",
+       "text": "Luftfederung",
+       "preis": 0,
+       "kosten": 0
+      },
+      {
+       "mid": "reifen",
+       "wid": "r195",
+       "code": "R195",
+       "merkmal": "Bereifung",
+       "ueberschrift": "Fahrwerk",
+       "text": "245/70 R19,5 zwillingsbereift (× 3)",
+       "preis": 1140,
+       "kosten": 780
+      },
+      {
+       "mid": "ladeflaeche",
+       "wid": "l11500",
+       "code": "LF115",
+       "merkmal": "Ladefläche",
+       "ueberschrift": "Tiefbett-Plattform",
+       "text": "11.500 mm",
+       "preis": 3200,
+       "kosten": 2300
+      },
+      {
+       "mid": "breite",
+       "wid": "b3300",
+       "code": "B330V",
+       "merkmal": "Breite",
+       "ueberschrift": "Tiefbett-Plattform",
+       "text": "Verbreiterbar auf 3.300 mm",
+       "preis": 4600,
+       "kosten": 3100
+      },
+      {
+       "mid": "rampen",
+       "wid": "hydrv",
+       "code": "RAHV",
+       "merkmal": "Auffahrrampen",
+       "ueberschrift": "Heck",
+       "text": "Hydraulisch, seitlich verschiebbar",
+       "preis": 8900,
+       "kosten": 6100
+      },
+      {
+       "mid": "farbe",
+       "wid": "r3000",
+       "code": "RAL3000",
+       "merkmal": "Farbe",
+       "ueberschrift": "Lackierung",
+       "text": "RAL 3000 Feuerrot",
+       "preis": 0,
+       "kosten": 0
+      },
+      {
+       "mid": "zubehoer",
+       "wid": "zurr",
+       "code": "Z-ZP20",
+       "merkmal": "Ausstattung",
+       "ueberschrift": "Ausstattung",
+       "text": "Zurrpunkte 10 t, 20 Stück",
+       "preis": 1150,
+       "kosten": 690
+      },
+      {
+       "mid": "zubehoer",
+       "wid": "led",
+       "code": "Z-LED",
+       "merkmal": "Ausstattung",
+       "ueberschrift": "Ausstattung",
+       "text": "LED-Beleuchtung komplett",
+       "preis": 980,
+       "kosten": 610
+      },
+      {
+       "mid": "zubehoer",
+       "wid": "stuetz",
+       "code": "Z-SFH",
+       "merkmal": "Ausstattung",
+       "ueberschrift": "Ausstattung",
+       "text": "Hydraulische Stützfüße",
+       "preis": 3400,
+       "kosten": 2350
+      }
+     ],
+     "einzel": 87970,
+     "kosten": 62630,
+     "menge": 3,
+     "rabatt": 4,
+     "version": 1
+    },
+    {
+     "typ": "frei",
+     "text": "Überführung zum Kunden je Fahrzeug",
+     "einzel": 850,
+     "kosten": 620,
+     "menge": 3,
+     "rabatt": 0
+    }
+   ],
+   "rabatt": 2,
+   "texte": {
+    "einleitung": "Sehr geehrte Damen und Herren,\nvielen Dank für Ihre Anfrage. Gern bieten wir Ihnen die folgenden Fahrzeuge nach Ihren Vorgaben an.",
+    "lieferung": "Lieferzeit ca. 14 Wochen nach Auftragsklärung. Lieferung ab Werk, Überführung auf Wunsch.",
+    "zahlung": "30 % Anzahlung bei Auftragserteilung, Rest bei Abholung bzw. vor Auslieferung.",
+    "gewaehrleistung": "12 Monate Gewährleistung auf Fahrzeug und Aufbau, 24 Monate auf Achsaggregate.",
+    "schluss": "Wir freuen uns auf Ihren Auftrag. Für Rückfragen steht Ihnen {{bearbeiter.name}} unter {{bearbeiter.tel}} gern zur Verfügung.",
+    "zeigeMerkmalpreise": true,
+    "zeigeBild": true,
+    "zeigeStueckliste": false
+   },
+   "token": "raum-k7q2m9xa4t",
+   "freigegeben": true,
+   "events": [
+    {
+     "typ": "aufruf",
+     "ts": 1792966068092,
+     "dauer": 212,
+     "geraet": "Desktop"
+    },
+    {
+     "typ": "aufruf",
+     "ts": 1793277108092,
+     "dauer": 95,
+     "geraet": "Mobil"
+    },
+    {
+     "typ": "aufruf",
+     "ts": 1793601108092,
+     "dauer": 430,
+     "geraet": "Desktop"
+    },
+    {
+     "typ": "pdf",
+     "ts": 1793601408092
+    },
+    {
+     "typ": "aufruf",
+     "ts": 1793694708092,
+     "dauer": 188,
+     "geraet": "Desktop"
+    },
+    {
+     "typ": "rueckfrage",
+     "ts": 1793694878092,
+     "text": "Können die Rampen auch 2,5 m lang ausgeführt werden? Wir verladen Raupenbagger."
+    }
+   ],
+   "beispiel": true
+  },
+  {
+   "nr": "AN-2026-1044",
+   "kundeId": "k10688",
+   "kunde": {
+    "firma": "Nordsee Anlagenbau AG",
+    "person": "Frau Ines Petersen",
+    "strasse": "Am Kai 14",
+    "ort": "26382 Wilhelmshaven",
+    "mail": "i.petersen@nordsee-anlagenbau.example"
+   },
+   "bearbeiter": "v2",
+   "erstellt": 1793190708092,
+   "gueltig": 1795782708092,
+   "status": "versendet",
+   "positionen": [
+    {
+     "typ": "konfig",
+     "produkt": "TB",
+     "produktName": "Tiefbett-Auflieger TB",
+     "sel": {
+      "achsen": "a6",
+      "lenkung": "hydr",
+      "federung": "hydro",
+      "reifen": "r175",
+      "ladeflaeche": "tele",
+      "breite": "b3300",
+      "hals": "abnehmbar",
+      "rampen": "keine",
+      "farbe": "r7016",
+      "zubehoer": [
+       "zurr",
+       "led",
+       "kiste",
+       "stuetz"
+      ]
+     },
+     "zeilen": [
+      {
+       "mid": "_basis",
+       "merkmal": "Grundfahrzeug",
+       "text": "Tiefbett-Auflieger TB",
+       "preis": 79500,
+       "kosten": 58200
+      },
+      {
+       "mid": "achsen",
+       "wid": "a6",
+       "code": "A6",
+       "merkmal": "Achsanzahl",
+       "ueberschrift": "Fahrwerk",
+       "text": "6 Achsen",
+       "preis": 33500,
+       "kosten": 24100
+      },
+      {
+       "mid": "lenkung",
+       "wid": "hydr",
+       "code": "LZH",
+       "merkmal": "Lenkung",
+       "ueberschrift": "Fahrwerk",
+       "text": "Hydraulische Zwangslenkung",
+       "preis": 18500,
+       "kosten": 12900
+      },
+      {
+       "mid": "federung",
+       "wid": "hydro",
+       "code": "FPH",
+       "merkmal": "Federung",
+       "ueberschrift": "Fahrwerk",
+       "text": "Hydraulische Pendelachsen, Hub 300 mm (× 6)",
+       "preis": 25200,
+       "kosten": 18000
+      },
+      {
+       "mid": "reifen",
+       "wid": "r175",
+       "code": "R175",
+       "merkmal": "Bereifung",
+       "ueberschrift": "Fahrwerk",
+       "text": "235/75 R17,5 zwillingsbereift",
+       "preis": 0,
+       "kosten": 0
+      },
+      {
+       "mid": "ladeflaeche",
+       "wid": "tele",
+       "code": "LFT150",
+       "merkmal": "Ladefläche",
+       "ueberschrift": "Tiefbett-Plattform",
+       "text": "9.000 mm, teleskopierbar auf 15.000 mm",
+       "preis": 12900,
+       "kosten": 9100
+      },
+      {
+       "mid": "breite",
+       "wid": "b3300",
+       "code": "B330V",
+       "merkmal": "Breite",
+       "ueberschrift": "Tiefbett-Plattform",
+       "text": "Verbreiterbar auf 3.300 mm",
+       "preis": 4600,
+       "kosten": 3100
+      },
+      {
+       "mid": "hals",
+       "wid": "abnehmbar",
+       "code": "SH-AH",
+       "merkmal": "Schwanenhals",
+       "ueberschrift": "Schwanenhals-Typ",
+       "text": "Hydraulisch abnehmbar",
+       "preis": 16800,
+       "kosten": 11900
+      },
+      {
+       "mid": "rampen",
+       "wid": "keine",
+       "code": "RA0",
+       "merkmal": "Auffahrrampen",
+       "ueberschrift": "Heck",
+       "text": "Keine",
+       "preis": 0,
+       "kosten": 0
+      },
+      {
+       "mid": "farbe",
+       "wid": "r7016",
+       "code": "RAL7016",
+       "merkmal": "Farbe",
+       "ueberschrift": "Lackierung",
+       "text": "RAL 7016 Anthrazitgrau",
+       "preis": 0,
+       "kosten": 0
+      },
+      {
+       "mid": "zubehoer",
+       "wid": "zurr",
+       "code": "Z-ZP20",
+       "merkmal": "Ausstattung",
+       "ueberschrift": "Ausstattung",
+       "text": "Zurrpunkte 10 t, 20 Stück",
+       "preis": 1150,
+       "kosten": 690
+      },
+      {
+       "mid": "zubehoer",
+       "wid": "led",
+       "code": "Z-LED",
+       "merkmal": "Ausstattung",
+       "ueberschrift": "Ausstattung",
+       "text": "LED-Beleuchtung komplett",
+       "preis": 980,
+       "kosten": 610
+      },
+      {
+       "mid": "zubehoer",
+       "wid": "stuetz",
+       "code": "Z-SFH",
+       "merkmal": "Ausstattung",
+       "ueberschrift": "Ausstattung",
+       "text": "Hydraulische Stützfüße",
+       "preis": 3400,
+       "kosten": 2350
+      },
+      {
+       "mid": "zubehoer",
+       "wid": "kiste",
+       "code": "Z-WK",
+       "merkmal": "Ausstattung",
+       "ueberschrift": "Ausstattung",
+       "text": "Werkzeugkasten",
+       "preis": 420,
+       "kosten": 240
+      }
+     ],
+     "einzel": 196950,
+     "kosten": 141190,
+     "menge": 1,
+     "rabatt": 0,
+     "version": 1
+    },
+    {
+     "typ": "frei",
+     "text": "Einweisung Fahrpersonal vor Ort (1 Tag)",
+     "einzel": 1200,
+     "kosten": 700,
+     "menge": 1,
+     "rabatt": 0
+    }
+   ],
+   "rabatt": 0,
+   "texte": {
+    "einleitung": "Sehr geehrte Damen und Herren,\nvielen Dank für Ihre Anfrage. Gern bieten wir Ihnen die folgenden Fahrzeuge nach Ihren Vorgaben an.",
+    "lieferung": "Lieferzeit ca. 14 Wochen nach Auftragsklärung. Lieferung ab Werk, Überführung auf Wunsch.",
+    "zahlung": "30 % Anzahlung bei Auftragserteilung, Rest bei Abholung bzw. vor Auslieferung.",
+    "gewaehrleistung": "12 Monate Gewährleistung auf Fahrzeug und Aufbau, 24 Monate auf Achsaggregate.",
+    "schluss": "Wir freuen uns auf Ihren Auftrag. Für Rückfragen steht Ihnen {{bearbeiter.name}} unter {{bearbeiter.tel}} gern zur Verfügung.",
+    "zeigeMerkmalpreise": true,
+    "zeigeBild": true,
+    "zeigeStueckliste": false
+   },
+   "token": "raum-p3w8n1zc6e",
+   "freigegeben": true,
+   "events": [
+    {
+     "typ": "aufruf",
+     "ts": 1793233908092,
+     "dauer": 66,
+     "geraet": "Desktop"
+    }
+   ],
+   "beispiel": true
+  },
+  {
+   "nr": "AN-2026-1045",
+   "kundeId": "k10512",
+   "kunde": {
+    "firma": "Forstbetrieb Hofmann KG",
+    "person": "Herr Stefan Hofmann",
+    "strasse": "Waldweg 21",
+    "ort": "77709 Wolfach",
+    "mail": "s.hofmann@forst-hofmann.example"
+   },
+   "bearbeiter": "v1",
+   "erstellt": 1793449908092,
+   "gueltig": 1796041908092,
+   "status": "angenommen",
+   "positionen": [
+    {
+     "typ": "konfig",
+     "produkt": "LN",
+     "produktName": "Langholz-Nachläufer LN",
+     "sel": {
+      "achsen": "a3",
+      "lenkung": "zwang",
+      "reifen": "r175",
+      "rungen": "rp4",
+      "farbe": "r5010",
+      "zubehoer": [
+       "led"
+      ]
+     },
+     "zeilen": [
+      {
+       "mid": "_basis",
+       "merkmal": "Grundfahrzeug",
+       "text": "Langholz-Nachläufer LN",
+       "preis": 29800,
+       "kosten": 21400
+      },
+      {
+       "mid": "achsen",
+       "wid": "a3",
+       "code": "A3",
+       "merkmal": "Achsanzahl",
+       "ueberschrift": "Fahrwerk",
+       "text": "3 Achsen",
+       "preis": 6800,
+       "kosten": 4900
+      },
+      {
+       "mid": "lenkung",
+       "wid": "zwang",
+       "code": "LZM",
+       "merkmal": "Lenkung",
+       "ueberschrift": "Fahrwerk",
+       "text": "Zwangslenkung mechanisch",
+       "preis": 8900,
+       "kosten": 6200
+      },
+      {
+       "mid": "reifen",
+       "wid": "r175",
+       "code": "R175",
+       "merkmal": "Bereifung",
+       "ueberschrift": "Fahrwerk",
+       "text": "235/75 R17,5 zwillingsbereift",
+       "preis": 0,
+       "kosten": 0
+      },
+      {
+       "mid": "rungen",
+       "wid": "rp4",
+       "code": "RP4",
+       "merkmal": "Rungenpaare",
+       "ueberschrift": "Holzaufbau",
+       "text": "4 Rungenpaare",
+       "preis": 2900,
+       "kosten": 1960
+      },
+      {
+       "mid": "farbe",
+       "wid": "r5010",
+       "code": "RAL5010",
+       "merkmal": "Farbe",
+       "ueberschrift": "Lackierung",
+       "text": "RAL 5010 Enzianblau",
+       "preis": 0,
+       "kosten": 0
+      },
+      {
+       "mid": "zubehoer",
+       "wid": "led",
+       "code": "Z-LED",
+       "merkmal": "Ausstattung",
+       "ueberschrift": "Ausstattung",
+       "text": "LED-Beleuchtung komplett",
+       "preis": 980,
+       "kosten": 610
+      }
+     ],
+     "einzel": 49380,
+     "kosten": 35070,
+     "menge": 2,
+     "rabatt": 3,
+     "version": 1
+    }
+   ],
+   "rabatt": 0,
+   "texte": {
+    "einleitung": "Sehr geehrte Damen und Herren,\nvielen Dank für Ihre Anfrage. Gern bieten wir Ihnen die folgenden Fahrzeuge nach Ihren Vorgaben an.",
+    "lieferung": "Lieferzeit ca. 14 Wochen nach Auftragsklärung. Lieferung ab Werk, Überführung auf Wunsch.",
+    "zahlung": "30 % Anzahlung bei Auftragserteilung, Rest bei Abholung bzw. vor Auslieferung.",
+    "gewaehrleistung": "12 Monate Gewährleistung auf Fahrzeug und Aufbau, 24 Monate auf Achsaggregate.",
+    "schluss": "Wir freuen uns auf Ihren Auftrag. Für Rückfragen steht Ihnen {{bearbeiter.name}} unter {{bearbeiter.tel}} gern zur Verfügung.",
+    "zeigeMerkmalpreise": true,
+    "zeigeBild": true,
+    "zeigeStueckliste": false
+   },
+   "token": "raum-h5d9r2kq8v",
+   "freigegeben": true,
+   "events": [
+    {
+     "typ": "aufruf",
+     "ts": 1793467188092,
+     "dauer": 140,
+     "geraet": "Mobil"
+    },
+    {
+     "typ": "aufruf",
+     "ts": 1793605428092,
+     "dauer": 260,
+     "geraet": "Desktop"
+    },
+    {
+     "typ": "angenommen",
+     "ts": 1793605678092,
+     "name": "Stefan Hofmann"
+    }
+   ],
+   "beispiel": true
+  },
+  {
+   "nr": "AN-2026-1046",
+   "kundeId": "k10603",
+   "kunde": {
+    "firma": "Bauunternehmung Ruf GmbH & Co. KG",
+    "person": "Herr Daniel Ruf",
+    "strasse": "Gewerbepark 5",
+    "ort": "79098 Freiburg",
+    "mail": "d.ruf@ruf-bau.example"
+   },
+   "bearbeiter": "v2",
+   "erstellt": 1793622708092,
+   "gueltig": 1796214708092,
+   "status": "entwurf",
+   "positionen": [
+    {
+     "typ": "konfig",
+     "produkt": "PA",
+     "produktName": "Plattform-Auflieger PA",
+     "sel": {
+      "achsen": "a3",
+      "lenkung": "zwang",
+      "federung": "luft",
+      "reifen": "r175",
+      "ladeflaeche": "l11500",
+      "breite": "b2750",
+      "rampen": "keine",
+      "farbe": "r9005",
+      "zubehoer": [
+       "zurr",
+       "rungtaschen"
+      ]
+     },
+     "zeilen": [
+      {
+       "mid": "_basis",
+       "merkmal": "Grundfahrzeug",
+       "text": "Plattform-Auflieger PA",
+       "preis": 36500,
+       "kosten": 26900
+      },
+      {
+       "mid": "achsen",
+       "wid": "a3",
+       "code": "A3",
+       "merkmal": "Achsanzahl",
+       "ueberschrift": "Fahrwerk",
+       "text": "3 Achsen",
+       "preis": 6800,
+       "kosten": 4900
+      },
+      {
+       "mid": "lenkung",
+       "wid": "zwang",
+       "code": "LZM",
+       "merkmal": "Lenkung",
+       "ueberschrift": "Fahrwerk",
+       "text": "Zwangslenkung mechanisch",
+       "preis": 8900,
+       "kosten": 6200
+      },
+      {
+       "mid": "federung",
+       "wid": "luft",
+       "code": "FL",
+       "merkmal": "Federung",
+       "ueberschrift": "Fahrwerk",
+       "text": "Luftfederung",
+       "preis": 0,
+       "kosten": 0
+      },
+      {
+       "mid": "reifen",
+       "wid": "r175",
+       "code": "R175",
+       "merkmal": "Bereifung",
+       "ueberschrift": "Fahrwerk",
+       "text": "235/75 R17,5 zwillingsbereift",
+       "preis": 0,
+       "kosten": 0
+      },
+      {
+       "mid": "ladeflaeche",
+       "wid": "l11500",
+       "code": "LF115",
+       "merkmal": "Ladefläche",
+       "ueberschrift": "Tiefbett-Plattform",
+       "text": "11.500 mm",
+       "preis": 3200,
+       "kosten": 2300
+      },
+      {
+       "mid": "breite",
+       "wid": "b2750",
+       "code": "B275",
+       "merkmal": "Breite",
+       "ueberschrift": "Tiefbett-Plattform",
+       "text": "2.750 mm",
+       "preis": 900,
+       "kosten": 600
+      },
+      {
+       "mid": "rampen",
+       "wid": "keine",
+       "code": "RA0",
+       "merkmal": "Auffahrrampen",
+       "ueberschrift": "Heck",
+       "text": "Keine",
+       "preis": 0,
+       "kosten": 0
+      },
+      {
+       "mid": "farbe",
+       "wid": "r9005",
+       "code": "RAL9005",
+       "merkmal": "Farbe",
+       "ueberschrift": "Lackierung",
+       "text": "RAL 9005 Tiefschwarz",
+       "preis": 0,
+       "kosten": 0
+      },
+      {
+       "mid": "zubehoer",
+       "wid": "zurr",
+       "code": "Z-ZP20",
+       "merkmal": "Ausstattung",
+       "ueberschrift": "Ausstattung",
+       "text": "Zurrpunkte 10 t, 20 Stück",
+       "preis": 1150,
+       "kosten": 690
+      },
+      {
+       "mid": "zubehoer",
+       "wid": "rungtaschen",
+       "code": "Z-RT10",
+       "merkmal": "Ausstattung",
+       "ueberschrift": "Ausstattung",
+       "text": "Rungentaschen mit 10 Stahlrungen",
+       "preis": 1900,
+       "kosten": 1200
+      }
+     ],
+     "einzel": 59350,
+     "kosten": 42790,
+     "menge": 2,
+     "rabatt": 0,
+     "version": 1
+    }
+   ],
+   "rabatt": 0,
+   "texte": {
+    "einleitung": "Sehr geehrte Damen und Herren,\nvielen Dank für Ihre Anfrage. Gern bieten wir Ihnen die folgenden Fahrzeuge nach Ihren Vorgaben an.",
+    "lieferung": "Lieferzeit ca. 14 Wochen nach Auftragsklärung. Lieferung ab Werk, Überführung auf Wunsch.",
+    "zahlung": "30 % Anzahlung bei Auftragserteilung, Rest bei Abholung bzw. vor Auslieferung.",
+    "gewaehrleistung": "12 Monate Gewährleistung auf Fahrzeug und Aufbau, 24 Monate auf Achsaggregate.",
+    "schluss": "Wir freuen uns auf Ihren Auftrag. Für Rückfragen steht Ihnen {{bearbeiter.name}} unter {{bearbeiter.tel}} gern zur Verfügung.",
+    "zeigeMerkmalpreise": true,
+    "zeigeBild": true,
+    "zeigeStueckliste": false
+   },
+   "token": null,
+   "freigegeben": false,
+   "events": [],
+   "beispiel": true
+  }
+ ],
+ "releases": [
+  {
+   "version": 1,
+   "ts": 1792672308092,
+   "von": null,
+   "notiz": "Erstes Konfigurationsmodell Auflieger",
+   "regeln": 13,
+   "merkmale": 11,
+   "produkte": 5
+  }
+ ],
+ "protokoll": [
+  {
+   "monat": "2026-11",
+   "eintraege": [
+    {
+     "ts": 1792672308092,
+     "von": null,
+     "bereich": "Freigabe",
+     "text": "Version 1 veröffentlicht"
+    },
+    {
+     "ts": 1793536308092,
+     "von": null,
+     "bereich": "Regeln",
+     "text": "R11 angelegt (inaktiv)"
+    }
+   ]
+  }
+ ],
+ "artikel": [
+  {
+   "ARTIKEL": "SEMI_ST3_S3F",
+   "NAME": "Semitieflader ST",
+   "VKPREIS": 48900,
+   "HERSTELLKOSTEN": 35600,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "FAHRZEUG"
+  },
+  {
+   "ARTIKEL": "TB_T4P_S3F",
+   "NAME": "Tiefbett-Auflieger TB",
+   "VKPREIS": 79500,
+   "HERSTELLKOSTEN": 58200,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "FZ-TB"
+  },
+  {
+   "ARTIKEL": "TB_T3P_S3F",
+   "NAME": "Tiefbett-Auflieger TB 3",
+   "VKPREIS": 71900,
+   "HERSTELLKOSTEN": 52800,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "FZ-TB"
+  },
+  {
+   "ARTIKEL": "PLAT_PA2_FL",
+   "NAME": "Plattform-Auflieger PA",
+   "VKPREIS": 36500,
+   "HERSTELLKOSTEN": 26900,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "FAHRZEUG"
+  },
+  {
+   "ARTIKEL": "NL_LN2_T",
+   "NAME": "Langholz-Nachläufer LN",
+   "VKPREIS": 29800,
+   "HERSTELLKOSTEN": 21400,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "FAHRZEUG"
+  },
+  {
+   "ARTIKEL": "TB_T5P_S3F",
+   "NAME": "Tiefbett-Auflieger TB 5 Schwerlast",
+   "VKPREIS": 98500,
+   "HERSTELLKOSTEN": 72400,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "FZ-TB"
+  },
+  {
+   "ARTIKEL": "TB_T4P_S3F_LB",
+   "NAME": "Tiefbett-Auflieger TB, Leichtbau",
+   "VKPREIS": 76900,
+   "HERSTELLKOSTEN": 56100,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "FZ-TB"
+  },
+  {
+   "ARTIKEL": "SEMI_ST2_S3F",
+   "NAME": "Semitieflader ST 2-achsig",
+   "VKPREIS": 44900,
+   "HERSTELLKOSTEN": 32800,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "FAHRZEUG"
+  },
+  {
+   "ARTIKEL": "A2",
+   "NAME": "2 Achsen",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "A3",
+   "NAME": "3 Achsen",
+   "VKPREIS": 6800,
+   "HERSTELLKOSTEN": 4900,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "A4",
+   "NAME": "4 Achsen",
+   "VKPREIS": 14900,
+   "HERSTELLKOSTEN": 10400,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "A5",
+   "NAME": "5 Achsen",
+   "VKPREIS": 23800,
+   "HERSTELLKOSTEN": 17100,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "A6",
+   "NAME": "6 Achsen",
+   "VKPREIS": 33500,
+   "HERSTELLKOSTEN": 24100,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "L0",
+   "NAME": "Starrachsen",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "LZM",
+   "NAME": "Zwangslenkung mechanisch",
+   "VKPREIS": 8900,
+   "HERSTELLKOSTEN": 6200,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "LZH",
+   "NAME": "Hydraulische Zwangslenkung",
+   "VKPREIS": 18500,
+   "HERSTELLKOSTEN": 12900,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "FL",
+   "NAME": "Luftfederung",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "FPH",
+   "NAME": "Hydraulische Pendelachsen, Hub 300 mm",
+   "VKPREIS": 4200,
+   "HERSTELLKOSTEN": 3000,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "R175",
+   "NAME": "235/75 R17,5 zwillingsbereift",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "R195",
+   "NAME": "Bereifung 245/70 R19,5 zwilling",
+   "VKPREIS": 380,
+   "HERSTELLKOSTEN": 260,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "R225",
+   "NAME": "385/65 R22,5 Super Single",
+   "VKPREIS": 720,
+   "HERSTELLKOSTEN": 500,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "LF090",
+   "NAME": "9.000 mm",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "LF115",
+   "NAME": "11.500 mm",
+   "VKPREIS": 3200,
+   "HERSTELLKOSTEN": 2300,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "LFT150",
+   "NAME": "9.000 mm, teleskopierbar auf 15.000 mm",
+   "VKPREIS": 12900,
+   "HERSTELLKOSTEN": 9100,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "B255",
+   "NAME": "2.550 mm",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "B275",
+   "NAME": "2.750 mm",
+   "VKPREIS": 900,
+   "HERSTELLKOSTEN": 600,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "B330V",
+   "NAME": "Verbreiterbar auf 3.300 mm",
+   "VKPREIS": 4600,
+   "HERSTELLKOSTEN": 3100,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "SH-F",
+   "NAME": "Fest",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "SH-AH",
+   "NAME": "Hydraulisch abnehmbar",
+   "VKPREIS": 16800,
+   "HERSTELLKOSTEN": 11900,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "RA0",
+   "NAME": "Keine",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "RAM",
+   "NAME": "Mechanisch klappbar",
+   "VKPREIS": 2900,
+   "HERSTELLKOSTEN": 1900,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "RAH",
+   "NAME": "Hydraulisch klappbar",
+   "VKPREIS": 6400,
+   "HERSTELLKOSTEN": 4300,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "RAHV",
+   "NAME": "Hydraulisch, seitlich verschiebbar",
+   "VKPREIS": 8900,
+   "HERSTELLKOSTEN": 6100,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "RP2",
+   "NAME": "2 Rungenpaare",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "RP3",
+   "NAME": "3 Rungenpaare",
+   "VKPREIS": 1450,
+   "HERSTELLKOSTEN": 980,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "RP4",
+   "NAME": "4 Rungenpaare",
+   "VKPREIS": 2900,
+   "HERSTELLKOSTEN": 1960,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "RAL9005",
+   "NAME": "RAL 9005 Tiefschwarz",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "RAL3000",
+   "NAME": "RAL 3000 Feuerrot",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "RAL5010",
+   "NAME": "RAL 5010 Enzianblau",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "RAL7016",
+   "NAME": "RAL 7016 Anthrazitgrau",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "RAL1028",
+   "NAME": "RAL 1028 Melonengelb",
+   "VKPREIS": 650,
+   "HERSTELLKOSTEN": 420,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "Z-ZP20",
+   "NAME": "Zurrpunkte 10 t, 20 Stück",
+   "VKPREIS": 1150,
+   "HERSTELLKOSTEN": 690,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "Z-RT10",
+   "NAME": "Rungentaschen mit 10 Stahlrungen",
+   "VKPREIS": 1900,
+   "HERSTELLKOSTEN": 1200,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "Z-SW12",
+   "NAME": "Seilwinde 12 t",
+   "VKPREIS": 6900,
+   "HERSTELLKOSTEN": 4800,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "Z-AL1",
+   "NAME": "Achslift 1. Achse",
+   "VKPREIS": 1600,
+   "HERSTELLKOSTEN": 1050,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "Z-LED",
+   "NAME": "LED-Beleuchtung komplett",
+   "VKPREIS": 980,
+   "HERSTELLKOSTEN": 610,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "Z-SFH",
+   "NAME": "Hydraulische Stützfüße",
+   "VKPREIS": 3400,
+   "HERSTELLKOSTEN": 2350,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "Z-WK",
+   "NAME": "Werkzeugkasten",
+   "VKPREIS": 420,
+   "HERSTELLKOSTEN": 240,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "RA-ST-100",
+   "NAME": "Rahmen Semitieflader, geschweißt",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "KP-200",
+   "NAME": "Königszapfen 2\"",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "EL-24-100",
+   "NAME": "Elektrik 24 V Grundausstattung",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Satz",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "MO-ST-001",
+   "NAME": "Montage und Endabnahme",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "h",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "RA-TB-100",
+   "NAME": "Rahmen Tiefbett, geschweißt",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "KP-350",
+   "NAME": "Königszapfen 3,5\"",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "MO-TB-001",
+   "NAME": "Montage und Endabnahme",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "h",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "RA-PA-100",
+   "NAME": "Rahmen Plattform, geschweißt",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "MO-PA-001",
+   "NAME": "Montage und Endabnahme",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "h",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "RA-LN-100",
+   "NAME": "Teleskoprohr mit Drehschemel",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "MO-LN-001",
+   "NAME": "Montage und Endabnahme",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "h",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "AC-10T-100",
+   "NAME": "Achsaggregat 10 t, Scheibenbremse",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "LK-ZW-100",
+   "NAME": "Zwangslenkung mit Drehschemelabnahme",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Satz",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "LK-HY-200",
+   "NAME": "Lenkhydraulik komplett",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Satz",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "LK-HY-210",
+   "NAME": "Lenkzylinder",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "FE-LU-010",
+   "NAME": "Luftfederbalg",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "FE-HP-020",
+   "NAME": "Pendelachse hydraulisch",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "RF-175-235",
+   "NAME": "Kompletrad 235/75 R17,5",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "RF-195-245",
+   "NAME": "Kompletrad 245/70 R19,5",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "RF-225-385",
+   "NAME": "Kompletrad 385/65 R22,5",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "BO-HZ-090",
+   "NAME": "Hartholzboden 50 mm, 9 m",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Satz",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "BO-HZ-115",
+   "NAME": "Hartholzboden 50 mm, 11,5 m",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Satz",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "RA-TE-600",
+   "NAME": "Teleskopauszug 6 m",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "RA-BR-275",
+   "NAME": "Außenrahmen 2.750 mm",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Satz",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "RA-VB-330",
+   "NAME": "Ausziehbare Verbreiterung",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "HA-HY-300",
+   "NAME": "Abnehmbarer Schwanenhals, hydraulisch",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "HY-AG-050",
+   "NAME": "Hydraulikaggregat 5,5 kW",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "RP-ME-220",
+   "NAME": "Auffahrrampe 2,2 m, federunterstützt",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "RP-HY-220",
+   "NAME": "Auffahrrampe 2,2 m, hydraulisch",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "HY-ZY-080",
+   "NAME": "Hydraulikzylinder Rampe",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "RP-VS-010",
+   "NAME": "Verschiebeeinrichtung",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "RU-HO-180",
+   "NAME": "Rungenpaar 1.800 mm",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "LA-9005",
+   "NAME": "Lackierung RAL 9005",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Satz",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "LA-3000",
+   "NAME": "Lackierung RAL 3000",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Satz",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "LA-5010",
+   "NAME": "Lackierung RAL 5010",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Satz",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "LA-7016",
+   "NAME": "Lackierung RAL 7016",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Satz",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "LA-1028",
+   "NAME": "Lackierung RAL 1028",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Satz",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "ZU-ZP-100",
+   "NAME": "Zurrpunkt 10 t",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "ZU-RT-010",
+   "NAME": "Rungentasche",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "ZU-RS-080",
+   "NAME": "Stahlrunge 800 mm",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "ZU-SW-120",
+   "NAME": "Seilwinde hydraulisch 12 t",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "ZU-AL-001",
+   "NAME": "Achslifteinrichtung",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "EL-LED-100",
+   "NAME": "LED-Leuchtenpaket",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Satz",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "ZU-SF-200",
+   "NAME": "Stützfuß hydraulisch",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "ZU-WK-060",
+   "NAME": "Werkzeugkasten 600 mm",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "TEIL"
+  },
+  {
+   "ARTIKEL": "A7",
+   "NAME": "7 Achsen",
+   "VKPREIS": 44800,
+   "HERSTELLKOSTEN": 32200,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "Z-KAM",
+   "NAME": "Rückfahrkamera mit Monitor",
+   "VKPREIS": 890,
+   "HERSTELLKOSTEN": 520,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "Z-TEL",
+   "NAME": "Telematik-Box mit Achslastanzeige",
+   "VKPREIS": 1450,
+   "HERSTELLKOSTEN": 910,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "R195B",
+   "NAME": "445/45 R19,5 Super Single",
+   "VKPREIS": 980,
+   "HERSTELLKOSTEN": 690,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "RAL6005",
+   "NAME": "RAL 6005 Moosgrün",
+   "VKPREIS": 0,
+   "HERSTELLKOSTEN": 0,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "Z-VB",
+   "NAME": "Verbreiterungsbohlen Holz (Satz)",
+   "VKPREIS": 1250,
+   "HERSTELLKOSTEN": 780,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  },
+  {
+   "ARTIKEL": "Z-FB",
+   "NAME": "Fernbedienung Hydraulik",
+   "VKPREIS": 1850,
+   "HERSTELLKOSTEN": 1200,
+   "ME": "Stk",
+   "ARTIKELGRUPPE": "VK-CODE"
+  }
+ ]
+}

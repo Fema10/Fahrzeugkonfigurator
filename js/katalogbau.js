@@ -1,0 +1,515 @@
+/* =====================================================================
+   Studio › Katalog aufbauen
+   Links der Katalogbaum (Familien und Fahrzeuge, per Drag & Drop sortieren),
+   Mitte das gewählte Element mit seinen Vertriebscodes, rechts der Artikelstamm
+   als Baukasten: Artikel auf eine Familie ziehen = neues Fahrzeug,
+   auf ein Fahrzeug oder eine Gruppe ziehen = Vertriebscode.
+   Was hier steht, zeigt der Katalog nach der Freigabe genau so.
+   ===================================================================== */
+(function (root) {
+  const K = root.KONF, E = K.E, esc = K.esc, S = () => K.Store.S, ent = () => S().entwurf, St = () => K.studio;
+  const ro = () => !K.Store.schreiben;
+  const norm = s => String(s ?? "").toUpperCase().trim();
+  const geaendert = t => St().geaendert(t);
+  K.kb = { sel: "", poolTab: "artikel", poolSuche: "", poolWahl: new Set(), codeSuche: "", einfuegen: false, einfuegenText: "", ziel: "", loeschen: null, offen: {} };
+
+  /* ---------- Modell-Hilfen ---------- */
+  const gruppe = id => ent().gruppen.find(g => g.id === id);
+  const kinder = id => ent().gruppen.filter(g => (g.eltern || "") === (id || ""));
+  const fahrzeuge = gid => ent().produkte.filter(p => (p.gruppe || "") === (gid || ""));
+  const eindeutig = (basis, liste) => { let id = String(basis || "x").replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 40) || "x", n = 2; const b = id; while (liste.some(x => x.id === id)) id = b + "-" + n++; return id; };
+  const wertVon = code => { const C = norm(code); for (const m of ent().merkmale) for (const w of m.werte) if (w.code && norm(w.code) === C) return { m, w }; return null; };
+  const codesVon = p => E.produktMerkmale(ent(), p).reduce((n, x) => n + x.werte.length, 0);
+  const istUnter = (gid, ziel) => { let g = gruppe(ziel), n = 0; while (g && n++ < 40) { if (g.id === gid) return true; g = gruppe(g.eltern); } return false; };
+  const typRaten = t => { t = String(t || "").toLowerCase(); return /tiefbett|tieflader/.test(t) ? "tiefbett" : /plattform/.test(t) ? "plattform" : /nachl|holz|forst|logo|langholz/.test(t) ? "nachlaeufer" : "semi"; };
+
+  /** Ein Merkmal bekommt einen neuen Wert: wer das Merkmal bisher „mit allen Werten“ hatte, behält genau die bisherigen */
+  function einfrieren(m) {
+    const alle = m.werte.map(w => w.id), mo = ent();
+    for (const o of [...mo.gruppen, ...mo.produkte]) for (const z of o.merkmale || []) if (z.id === m.id && !z.aus && !(z.werte && z.werte.length)) z.werte = alle.slice();
+  }
+  /** Wert am Fahrzeug verfügbar machen */
+  function amFahrzeug(p, m, w) {
+    const mo = ent(), eff = E.zuordnung(mo, p).find(e => e.id === m.id); p.merkmale ||= [];
+    let eigen = p.merkmale.find(z => z.id === m.id);
+    if (!eff) { if (eigen) { eigen.aus = false; eigen.werte = [w.id]; } else p.merkmale.push({ id: m.id, werte: [w.id] }); return; }
+    if (!eff.werte || eff.werte.includes(w.id)) return;
+    if (!eigen) { eigen = { id: m.id }; p.merkmale.push(eigen); }
+    eigen.werte = [...eff.werte, w.id]; eigen.aus = false;
+  }
+  function vomFahrzeug(p, mid, wid) {
+    const mo = ent(), m = E.merkmal(mo, mid), eff = E.zuordnung(mo, p).find(e => e.id === mid); if (!eff) return;
+    const rest = (eff.werte || m.werte.map(w => w.id)).filter(id => id !== wid);
+    p.merkmale ||= []; let eigen = p.merkmale.find(z => z.id === mid); if (!eigen) { eigen = { id: mid }; p.merkmale.push(eigen); }
+    if (rest.length) { eigen.werte = rest; eigen.aus = false; } else { eigen.aus = true; delete eigen.werte; }
+    if (eigen.standard === wid) delete eigen.standard;
+  }
+  function merkmalNeu(name, mehrfach) {
+    const mo = ent(), m = { id: eindeutig(E.slug(name).replace(/-/g, "") || "gruppe", mo.merkmale), name, abschnitt: "", typ: mehrfach ? "mehrfach" : "einfach", bereich: mehrfach ? "Optionen" : "Grundmaschine", werte: [] };
+    mo.merkmale.push(m); return m;
+  }
+  function weitereOptionen() { return ent().merkmale.find(m => m.name === "Weitere Optionen") || merkmalNeu("Weitere Optionen", true); }
+  /** Codes einem Fahrzeug geben. ziel: Merkmal-ID, "__neu" oder leer. preise: Map CODE → Preis */
+  /* ---------- Codes sinnvoll ordnen ----------
+     ZZ-Code = Überschrift. Gliedert das Angebot und erscheint dort.
+     YY-Code = Untergruppe. Fasst die folgenden Vertriebscodes zu einer Auswahl zusammen,
+               erscheint nicht extra im Angebot.
+     alle anderen Codes = Vertriebscodes (Auswahlmöglichkeiten) der aktuellen Untergruppe.
+       mehrere Codes mit gleichem Anfang (SC590, SC592 …) = eine Auswahl
+       mehrere Codes mit verschiedenem Anfang = mehrere wählbar
+       ein einzelner Code = Option ja/nein, ein einzelner GA-Code = fest in der Grundausstattung
+     Die Reihenfolge der Liste bestimmt die Gliederung. Gleiche ZZ/YY bei mehreren Fahrzeugen
+     nutzen dieselben Gruppen. Selbst geänderte Einstellungen einer Gruppe bleiben beim erneuten Ordnen. */
+  const praefixe = () => Object.assign({ ueber: "ZZ", grund: "GA", option: "YY" }, S().einst?.codeKennung || {});
+  K.codeKennung = praefixe;
+  const buchstaben = c => (String(c).toUpperCase().match(/^[A-ZÄÖÜ]+/) || [""])[0];
+  const hatName = w => w && w.name && norm(w.name) !== norm(w.code);
+  function strukturieren(p) {
+    const mo = ent(), pz = praefixe(), U = norm(pz.ueber), G = norm(pz.grund), O = norm(pz.option);
+    const istU = c => U && norm(c).startsWith(U), istO = c => O && norm(c).startsWith(O), istG = c => G && norm(c).startsWith(G);
+    const pm = E.produktMerkmale(mo, p), jetzt = pm.flatMap(x => x.werte.map(w => ({ w, m: x.m, std: x.standard === w.id })));
+    const info = new Map(); // CODE → { code, name, preis, kosten, w, std }
+    for (const e of jetzt) info.set(norm(e.w.code), { code: e.w.code, name: hatName(e.w) ? e.w.name : "", w: e.w, std: e.std });
+    for (const g of p.grundausstattung || []) if (!info.has(norm(g.code))) info.set(norm(g.code), { code: g.code, name: g.name, preis: g.preis, std: true });
+    // Reihenfolge: gemerkte Folge (mit ZZ/YY), neue Codes hinten an
+    let folge = (p.codeFolge || []).filter(c => istU(c) || istO(c) || info.has(norm(c)));
+    for (const e of [...info.values()]) if (!folge.some(c => norm(c) === norm(e.code))) folge.push(e.code);
+    if (!folge.some(c => !istU(c) && !istO(c))) return null;
+    mo.codeTexte ||= {};
+    const nameVon = (code, sonst) => { const n = info.get(norm(code))?.name || mo.codeTexte[norm(code)] || K.Store.artikelZu(code)?.name || sonst || code; if (n && norm(n) !== norm(code) && (istU(code) || istO(code))) mo.codeTexte[norm(code)] = n; return n; };
+    // Gliederung bilden
+    const abschnitte = []; let ab = null, grp = null;
+    for (const c of folge) {
+      if (istU(c)) { const alt = mo.merkmale.find(m => m.abschnittCode && norm(m.abschnittCode) === norm(c)); ab = { code: c, name: nameVon(c, alt?.abschnitt), gruppen: [] }; abschnitte.push(ab); grp = null; continue; }
+      if (!ab) { ab = { code: "", name: "Ausstattung", gruppen: [] }; abschnitte.push(ab); }
+      if (istO(c)) { const alt = mo.merkmale.find(m => m.code && norm(m.code) === norm(c)); grp = { code: c, name: nameVon(c, alt?.name), codes: [] }; ab.gruppen.push(grp); continue; }
+      if (!grp) { grp = { code: "", name: ab.name, codes: [] }; ab.gruppen.push(grp); }
+      grp.codes.push(c);
+    }
+    // alte Zuordnungen des Fahrzeugs ausblenden, neu aufbauen
+    const alt = new Set(pm.map(x => x.m.id)); p.merkmale = (p.merkmale || []).filter(z => !alt.has(z.id)); for (const id of alt) p.merkmale.push({ id, aus: true });
+    p.grundausstattung = [];
+    const neueReihe = [], stat = { abschnitte: 0, auswahl: 0, optionen: 0, fest: 0 };
+    const neuAngelegt = new Set();
+    const merkmalFuer = (schluessel, name, mehrfach) => {
+      let m = mo.merkmale.find(x => x.struktur === schluessel);
+      if (!m) { m = merkmalNeu(name, mehrfach); m.struktur = schluessel; neuAngelegt.add(m); }
+      return m;
+    };
+    const wertIn = (m, code) => {
+      let x = m.werte.find(v => norm(v.code) === norm(code)); if (x) return x;
+      const i = info.get(norm(code)) || {}, a = K.Store.artikelZu(code);
+      einfrieren(m); x = i.w ? { ...JSON.parse(JSON.stringify(i.w)), id: eindeutig(i.w.id, m.werte) } : { id: eindeutig(code, m.werte), code, name: i.name || a?.name || code, preis: i.preis ?? a?.preis ?? 0, kosten: a?.kosten || 0, stl: [] };
+      m.werte.push(x); return x;
+    };
+    for (const a of abschnitte) {
+      if (!a.gruppen.some(g => g.codes.length)) continue; stat.abschnitte++;
+      for (const g of a.gruppen) {
+        if (!g.codes.length) continue;
+        // Alternativen = größte Gruppe von Codes mit gleichem Anfang (z. B. FW301/FW302). Codes mit anderem Anfang
+        // daneben werden eigene Ja/Nein-Codes (z. B. LA325 Arbeitsscheinwerfer). Ohne Alternativen: mehrere wählbar.
+        const nurGA = g.codes.every(istG), anf = new Map(); for (const c of g.codes) { const b = buchstaben(c); anf.set(b, (anf.get(b) || 0) + 1); }
+        const [hauptAnfang, hauptZahl] = [...anf.entries()].sort((x, y) => y[1] - x[1])[0] || ["", 0];
+        const mitAlternativen = !nurGA && hauptZahl >= 2, mehrfach = !mitAlternativen;
+        const m = merkmalFuer(`${a.code || a.name}|${g.code || "*"}`, g.name, mehrfach);
+        Object.assign(m, { abschnitt: a.name, abschnittCode: a.code, ueberschrift: a.name, bereich: a.name, code: g.code || "" });
+        const ws = g.codes.map(c => wertIn(m, c)), ids = ws.map(w => w.id);
+        if (nurGA) for (const w of ws) if (!w.feld) { w.feld = "fest"; stat.fest++; } // Grundausstattung: fest enthalten
+        if (mitAlternativen && neuAngelegt.has(m)) for (const w of ws) if (!w.feld && buchstaben(w.code) !== hauptAnfang && !istG(w.code)) w.feld = "janein";
+        const z = { id: m.id, werte: ids };
+        if (m.typ !== "mehrfach" && E.wahlWerte(m, ws).length) { const std = g.codes.find(c => info.get(norm(c))?.std) || g.codes.find(istG) || g.codes[0]; z.standard = ws[g.codes.indexOf(std)].id; stat.auswahl++; } else stat.optionen++;
+        p.merkmale.push(z); neueReihe.push(m.id);
+      }
+    }
+    // Grundpreis aus der Grundausstattung, wenn noch keiner gepflegt ist
+    p.codeFolge = folge; p.reihenfolge = neueReihe;
+    aufraeumen();
+    return stat;
+  }
+  /** Merkmale, die niemand mehr nutzt und keine Regel kennt, entfernen */
+  function aufraeumen() {
+    const mo = ent(), benutzt = new Set();
+    for (const o of [...mo.gruppen, ...mo.produkte]) for (const z of o.merkmale || []) if (!z.aus) benutzt.add(z.id);
+    const inRegeln = JSON.stringify(mo.regeln || []);
+    const weg = mo.merkmale.filter(m => !benutzt.has(m.id) && !inRegeln.includes(`"${m.id}"`)); if (!weg.length) return;
+    const ids = new Set(weg.map(m => m.id)); mo.merkmale = mo.merkmale.filter(m => !ids.has(m.id));
+    for (const o of [...mo.gruppen, ...mo.produkte]) { if (o.merkmale) o.merkmale = o.merkmale.filter(z => !ids.has(z.id)); if (o.reihenfolge) o.reihenfolge = o.reihenfolge.filter(id => !ids.has(id)); }
+  }
+  K.kbStrukturieren = strukturieren;
+  function codesZuFahrzeug(p, codes, ziel, preise, namen) {
+    const mo = ent(); let zm = ziel && ziel !== "__neu" ? E.merkmal(mo, ziel) : null, neuGruppe = null, schon = 0, anders = 0, neu = 0;
+    for (const code of codes) {
+      const t = wertVon(code), pr = preise && preise.get(norm(code)), nm = namen && namen.get(norm(code));
+      if (t && nm && !hatName(t.w)) t.w.name = nm;
+      if (t) {
+        if (E.produktMerkmale(mo, p).some(x => x.werte.includes(t.w))) schon++; else amFahrzeug(p, t.m, t.w);
+        if (zm && t.m !== zm) anders++;
+        if (pr != null && pr !== E.wertPreis(mo, p, t.w)) { p.preise ||= {}; p.preise[norm(code)] = pr; }
+        continue;
+      }
+      if (!zm) zm = ziel === "__neu" ? (neuGruppe = merkmalNeu("Neue Gruppe", true)) : weitereOptionen();
+      einfrieren(zm);
+      const a = K.Store.artikelZu(code), w = { id: eindeutig(code, zm.werte), code: a?.code || String(code).trim(), name: nm || a?.name || String(code).trim(), preis: pr ?? a?.preis ?? 0, kosten: a?.kosten || 0, stl: [] };
+      zm.werte.push(w); amFahrzeug(p, zm, w); neu++;
+    }
+    return { neu, schon, anders, neuGruppe };
+  }
+  function fahrzeugeAnlegen(gid, codes) {
+    const mo = ent(); let neu = 0, verschoben = 0;
+    for (const code of codes) {
+      const vorh = mo.produkte.find(p => norm(p.code) === norm(code));
+      if (vorh) { if (vorh.gruppe !== gid) { vorh.gruppe = gid; verschoben++; } continue; }
+      const a = K.Store.artikelZu(code), name = a?.name || String(code).trim();
+      mo.produkte.push({ id: eindeutig(code, mo.produkte), code: a?.code || String(code).trim(), name, gruppe: gid, artnr: a?.code || String(code).trim(), basispreis: a?.preis || 0, basiskosten: a?.kosten || 0, aktiv: true, beschreibung: "",
+        visual: { typ: typRaten(name + " " + (gruppe(gid)?.name || "")), asset: null }, stl: [], merkmale: [] });
+      neu++;
+    }
+    return { neu, verschoben };
+  }
+  /** Element in einem Array vor/nach ein anderes setzen */
+  function umsetzen(liste, el, ziel, nach) { const i = liste.indexOf(el); if (i >= 0) liste.splice(i, 1); let j = ziel ? liste.indexOf(ziel) : liste.length; if (j < 0) j = liste.length; liste.splice(nach ? j + 1 : j, 0, el); }
+
+  /* ---------- Bilder (in APplus ohne Dateiablage: verkleinert im Modell) ---------- */
+  const alteBildUrl = K.bildUrl;
+  K.bildUrl = id => id && String(id).startsWith("data:") ? id : alteBildUrl(id);
+  async function bildLesen(el) {
+    if (el.dataset.weg) return null;
+    if (K.assets) return St().bildHochladen(el);
+    const f = el.files && el.files[0]; if (!f) return undefined;
+    const url = await new Promise((ok, nein) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = nein; r.readAsDataURL(f); });
+    if (/svg/.test(f.type)) return f.size < 150e3 ? url : (K.toast("SVG bitte unter 150 KB."), undefined);
+    const img = await new Promise((ok, nein) => { const i = new Image(); i.onload = () => ok(i); i.onerror = nein; i.src = url; });
+    const s = Math.min(1, 640 / Math.max(img.width, img.height)), c = document.createElement("canvas"); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", .82);
+  }
+  K.bildLesen = bildLesen;
+  const bildFeld = (id, act, daten) => `<div class="bildfeld">${id ? `<img src="${K.bildUrl(id)}" alt="">` : `<span class="gedimmt klein">kein Bild</span>`}
+    ${ro() ? "" : `<label class="btn klein">${id ? "Ersetzen" : "Bild wählen"}<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" data-act="${act}" ${daten} hidden></label>${id ? `<button type="button" class="btn klein" data-act="${act}" data-weg="1" ${daten}>Entfernen</button>` : ""}`}</div>`;
+
+  /* ---------- Ansicht ---------- */
+  K.route("studio-katalog", () => {
+    const mo = ent(); if (!mo) return St().keinEntwurf();
+    const kb = K.kb; if (kb.sel && !objekt(kb.sel)) kb.sel = "";
+    const leer = !mo.gruppen.length && !mo.produkte.length;
+    return `<div class="kopfzeile"><div><div class="eyebrow">Studio · Entwurf</div><h2>Katalog aufbauen</h2><p>Familien anlegen und per Drag &amp; Drop ordnen. Artikel aus dem Artikelstamm rechts auf eine Familie ziehen ergibt ein Fahrzeug, auf ein Fahrzeug ziehen ergibt Vertriebscodes. Mehrere Artikel ankreuzen und zusammen ziehen.</p></div>
+      <div class="row"><button class="btn" type="button" data-act="kbVorschau">Vorschau im Katalog</button><a class="btn primary" href="#studio-freigabe">Freigeben</a>${ro() ? "" : `<button class="btn klein gefahr-text" type="button" data-act="kbLeeren">${kb.leeren ? "Wirklich alles leeren?" : "Neu beginnen"}</button>`}</div></div>
+      ${leer ? `<div class="hinweis">Der Entwurf ist leer. Legen Sie links mit „+ Familie“ die erste Familie an, z. B. „Holztransport“.</div>` : mo.produkte.some(p => /^(ST|TB|TB3|PA|LN)$/.test(p.id)) ? `<div class="hinweis">Hier stehen noch die <b>Beispieldaten</b> (Schwertransport, Holztransport …). Mit „Neu beginnen“ starten Sie mit einem leeren Katalog. Der Vertrieb sieht weiter den alten Stand, bis Sie freigeben.</div>` : ""}
+      <div class="kb-layout">${baumAnsicht(mo)}<section class="kb-mitte">${mitte(mo)}</section>${pool(mo)}</div>`;
+  });
+  function objekt(sel) { if (!sel) return null; const id = sel.slice(2); return sel[0] === "g" ? gruppe(id) : E.produkt(ent(), id); }
+
+  function baumAnsicht(mo) {
+    const kb = K.kb;
+    const famZeile = (g, t) => {
+      const ks = kinder(g.id), fs = fahrzeuge(g.id), offen = kb.offen[g.id] ?? true, n = E.familienArtikel(mo, g.id).length;
+      return `<li><div class="kb-zeile fam${kb.sel === "g:" + g.id ? " aktiv" : ""}" style="--t:${t}" draggable="${!ro()}" data-drag="g:${g.id}" data-drop="g:${g.id}">
+          <button type="button" class="kb-auf" data-act="kbAuf" data-g="${g.id}" aria-label="${offen ? "Zuklappen" : "Aufklappen"}">${ks.length || fs.length ? (offen ? "▾" : "▸") : ""}</button>
+          <button type="button" class="kb-nm" data-act="kbWahl" data-s="g:${g.id}"><span class="kb-ik">▤</span>${esc(g.name)}</button><span class="kb-zahl">${n}</span>
+          ${ro() ? "" : `<button type="button" class="kb-plus" data-act="kbFamNeu" data-g="${g.id}" title="Unterfamilie anlegen" aria-label="Unterfamilie anlegen">+</button>`}</div>
+        ${offen ? `<ul>${ks.map(k => famZeile(k, t + 1)).join("")}${fs.map(p => artZeile(p, t + 1)).join("")}</ul>` : ""}</li>`;
+    };
+    const artZeile = (p, t) => `<li><div class="kb-zeile art${kb.sel === "p:" + p.id ? " aktiv" : ""}${p.aktiv === false ? " inaktiv" : ""}" style="--t:${t}" draggable="${!ro()}" data-drag="p:${p.id}" data-drop="p:${p.id}">
+        <span class="kb-auf"></span><button type="button" class="kb-nm" data-act="kbWahl" data-s="p:${p.id}"><span class="kb-ik">▢</span><span class="kb-artname">${esc(p.name)}<code>${esc(p.code || "")}</code></span></button><span class="kb-zahl" title="Vertriebscodes">${codesVon(p)}</span></div></li>`;
+    const ohne = mo.produkte.filter(p => !p.gruppe || !gruppe(p.gruppe));
+    return `<nav class="panel kb-baum" aria-label="Katalog">
+      <div class="kb-baumkopf"><b>Katalog</b>${ro() ? "" : `<button class="btn klein" type="button" data-act="kbFamNeu" data-g="">+ Familie</button>`}</div>
+      <ul class="kb-liste" data-drop="g:">${kinder("").map(g => famZeile(g, 0)).join("")}
+        ${ohne.length ? `<li><div class="kb-zeile fam gedimmt" style="--t:0"><span class="kb-auf"></span><span class="kb-nm">Ohne Familie (nicht im Katalog)</span></div><ul>${ohne.map(p => artZeile(p, 1)).join("")}</ul></li>` : ""}</ul>
+      ${ro() ? "" : `<div class="kb-wurzel" data-drop="g:">Hierher ziehen = oberste Ebene</div>`}</nav>`;
+  }
+
+  function mitte(mo) {
+    const kb = K.kb, o = objekt(kb.sel);
+    if (!o) return `<div class="leer kb-tipp"><b>So geht es</b><ol><li>Links „+ Familie“ anlegen, z. B. Holztransport, darunter Logo 12.</li><li>Rechts im Artikelstamm die Fahrzeugnummern suchen und auf die Familie ziehen.</li><li>Das Fahrzeug anklicken und die Vertriebscodes hineinziehen oder als Liste einfügen.</li><li>„Vorschau im Katalog“ zeigt das Ergebnis, „Freigeben“ macht es für den Vertrieb sichtbar.</li></ol></div>`;
+    return kb.sel[0] === "g" ? familie(mo, o) : fahrzeug(mo, o);
+  }
+  function familie(mo, g) {
+    const fs = fahrzeuge(g.id), ks = kinder(g.id), pfad = E.gruppenPfad(mo, g.id).slice(0, -1);
+    return `<div class="panel kb-objekt" data-drop="g:${g.id}">
+      <div class="eyebrow">${pfad.length ? pfad.map(x => esc(x.name)).join(" › ") + " ›" : "Familie"}</div>
+      <div class="kb-kopf"><input id="kb-gname" class="flach titelfeld" data-chg="kbGName" value="${esc(g.name)}" aria-label="Name der Familie" ${St().dis()}>
+        ${ro() ? "" : `<button type="button" class="btn klein gefahr-text" data-act="kbLoeschen">${K.kb.loeschen === "g:" + g.id ? "Wirklich löschen?" : "Löschen"}</button>`}</div>
+      <div class="formgitter">
+        <div class="feld"><label for="kb-geltern">liegt unter</label><select id="kb-geltern" data-act="kbGEltern" ${St().dis()}><option value="">– oberste Ebene –</option>${mo.gruppen.filter(x => x.id !== g.id && !istUnter(g.id, x.id)).map(x => `<option value="${x.id}" ${x.id === g.eltern ? "selected" : ""}>${esc(E.gruppenPfad(mo, x.id).map(y => y.name).join(" › "))}</option>`).join("")}</select></div>
+        <div class="feld"><label>Bild im Katalog</label>${bildFeld(g.bild, "kbBild", `data-s="g:${g.id}"`)}</div></div>
+      <div class="feld"><label for="kb-gbes">Beschreibung</label><textarea id="kb-gbes" rows="2" data-chg="kbGBes" ${St().dis()}>${esc(g.beschreibung || "")}</textarea></div>
+      <h3>Inhalt</h3>
+      ${ks.length || fs.length ? `<div class="kb-kacheln">${ks.map(k => `<button type="button" class="kb-kachel fam" data-act="kbWahl" data-s="g:${k.id}"><span>▤</span><b>${esc(k.name)}</b><small>${E.familienArtikel(mo, k.id).length} Fahrzeuge</small></button>`).join("")}
+        ${fs.map(p => `<button type="button" class="kb-kachel" data-act="kbWahl" data-s="p:${p.id}"><span class="kb-silh">${p.bild ? `<img src="${K.bildUrl(p.bild)}" alt="">` : K.silhouette(p.visual?.typ, "var(--ink)")}</span><b>${esc(p.name)}</b><small><code>${esc(p.code || "")}</code> · ${codesVon(p)} Codes</small></button>`).join("")}</div>` : ""}
+      <div class="kb-ablage">Fahrzeuge aus dem Artikelstamm hierher ziehen<br><span class="gedimmt klein">oder rechts ankreuzen und „Als Fahrzeuge hinzufügen“</span></div>
+      ${famStruktur(mo, g)}</div>`;
+  }
+  /** Struktur, die alle Fahrzeuge der Familie erben */
+  function famStruktur(mo, g) {
+    const eff = E.zuordnung(mo, g).map(z => ({ z, m: E.merkmal(mo, z.id) })).filter(x => x.m), n = E.familienArtikel(mo, g.id).length;
+    const abs = [...new Set(eff.map(x => x.m.abschnitt || ""))];
+    return `<h3>Struktur für alle Fahrzeuge dieser Familie</h3>
+      <p class="klein gedimmt">Überschriften und Gruppen, die hier stehen, erbt jedes Fahrzeug darunter. Am Fahrzeug werden nur Abweichungen gepflegt (Codes weglassen, andere Vorauswahl). So legen Sie die Struktur einmal fest statt für jede Variante.</p>
+      ${eff.length ? abs.map(ab => `<div class="kb-famab"><span class="kb-abmarke">Überschrift</span> <b>${esc(ab || "ohne Überschrift")}</b></div><table class="kompakt kb-famtab"><tbody>${eff.filter(x => (x.m.abschnitt || "") === ab).map(({ z, m }) => `<tr><td>${esc(m.name)}${m.code ? ` <code class="gedimmt">${esc(m.code)}</code>` : ""}</td><td><select id="kb-fmt-${m.id}" data-act="kbMTyp" data-m="${m.id}" aria-label="Auswahl in dieser Gruppe" ${St().dis()}>${E.GRUPPENTYPEN.map(([k, nm]) => `<option value="${k}" ${E.gruppentyp(m) === k ? "selected" : ""}>${nm}</option>`).join("")}</select></td><td class="r gedimmt klein">${(z.werte || m.werte.map(w => w.id)).length} Codes${z.herkunft !== "g:" + g.id ? " · geerbt" : ""}</td></tr>`).join("")}</tbody></table>`).join("") : `<p class="klein">Noch keine gemeinsame Struktur.</p>`}
+      ${ro() || n < 2 ? "" : `<button class="btn klein" type="button" data-act="kbHoch">Gemeinsame Gruppen der ${n} Fahrzeuge an die Familie übergeben</button>`}`;
+  }
+  function abschnittsweise(pm, karte, p) {
+    const ga = p.grundausstattung || [], namen = [...new Set([...pm.map(x => x.m.abschnitt || ""), ...ga.map(g => g.gruppe || "")])];
+    if (namen.length === 1 && !namen[0] && !ga.length) return pm.map(karte).join("");
+    return namen.map(ab => { const ms = pm.filter(x => (x.m.abschnitt || "") === ab), gs = ga.map((g, i) => ({ g, i })).filter(x => (x.g.gruppe || "") === ab);
+      return `<section class="kb-abschnitt"><div class="kb-abkopf"><span class="kb-abmarke">Überschrift</span><input id="kb-ab-${esc(E.slug(ab) || "x")}" class="flach" data-chg="kbAbName" data-ab="${esc(ab)}" value="${esc(ab || "Ohne Überschrift")}" aria-label="Überschrift" ${St().dis()}></div>
+        ${gs.length ? `<div class="kb-gruppe fest"><div class="kb-gkopf"><b>Grundausstattung</b><span class="gedimmt klein">fest enthalten, keine Auswahl</span></div><div class="kb-chips">${gs.map(({ g, i }) => `<span class="kb-chip std"><code>${esc(g.code)}</code><span class="kb-cn">${esc(g.name)}</span>${ro() ? "" : `<button type="button" data-act="kbGaWeg" data-i="${i}" title="Entfernen" aria-label="Entfernen">✕</button>`}</span>`).join("")}</div></div>` : ""}
+        ${ms.map(karte).join("")}</section>`; }).join("");
+  }
+  function fahrzeug(mo, p) {
+    const kb = K.kb, pm = E.produktMerkmale(mo, p), q = kb.codeSuche.toLowerCase(), a = K.Store.artikelZu(p.code);
+    const passt = w => !q || (w.code + " " + w.name).toLowerCase().includes(q);
+    const gruppenOpt = `<option value="">Weitere Optionen</option>${pm.map(x => `<option value="${x.m.id}" ${kb.ziel === x.m.id ? "selected" : ""}>${esc(x.m.name)}</option>`).join("")}<option value="__neu" ${kb.ziel === "__neu" ? "selected" : ""}>neue Gruppe</option>`;
+    const karte = x => {
+      const ws = x.werte.filter(passt); if (q && !ws.length) return "";
+      const geerbt = x.herkunft && x.herkunft.startsWith("g:") ? gruppe(x.herkunft.slice(2)) : null;
+      return `<article class="kb-gruppe" data-drop="m:${x.m.id}" draggable="${!ro()}" data-drag="m:${x.m.id}">
+        <div class="kb-gkopf"><span class="kb-griff" title="Ziehen zum Sortieren">⋮⋮</span><input id="kb-mn-${x.m.id}" class="flach" data-chg="kbMName" data-m="${x.m.id}" value="${esc(x.m.name)}" aria-label="Name der Gruppe" ${St().dis()}>
+          <select id="kb-mt-${x.m.id}" class="kb-feldtyp" data-act="kbMTyp" data-m="${x.m.id}" aria-label="Auswahl in dieser Gruppe" title="Gilt für die Codes mit Feldtyp „Auswahl“" ${St().dis()}>${E.GRUPPENTYPEN.map(([k, n]) => `<option value="${k}" ${E.gruppentyp(x.m) === k ? "selected" : ""}>${n}</option>`).join("")}</select>
+          ${x.m.typ !== "mehrfach" && E.wahlWerte(x.m, x.werte).length ? `<label class="haken klein" title="Ohne Vorbelegung, der Vertrieb muss wählen"><input type="checkbox" data-act="kbMPflicht" data-m="${x.m.id}" ${x.m.pflicht ? "checked" : ""} ${St().dis()}> Pflicht</label>` : ""}
+          <span class="gedimmt klein">${x.werte.length}${geerbt ? ` · von ${esc(geerbt.name)}` : ""}</span>${ro() ? "" : `<button type="button" class="ikon" data-act="kbMWeg" data-m="${x.m.id}" title="Gruppe bei diesem Fahrzeug ausblenden" aria-label="Gruppe ausblenden">✕</button>`}</div>
+        <div class="kb-werte">${ws.map(w => { const pr = E.wertPreis(mo, p, w), std = x.standard === w.id, t = E.wertTyp(x.m, w), wahl = t === "auswahl";
+          return `<div class="kb-wert${std && wahl ? " std" : ""} t-${t}" draggable="${!ro()}" data-drag="w:${x.m.id}:${w.id}">
+            <span class="kb-griff">⋮⋮</span><code class="${K.Store.artikelQuelle && w.code && !K.Store.artikelZu(w.code) ? "unbekannt" : ""}">${esc(w.code || "–")}</code>
+            <input id="kb-wn-${x.m.id}-${w.id}" class="flach kb-wname" data-chg="kbWName" data-m="${x.m.id}" data-w="${w.id}" value="${esc(w.name)}" aria-label="Bezeichnung" ${St().dis()}>
+            <select id="kb-wt-${x.m.id}-${w.id}" class="kb-werttyp" data-act="kbWTyp" data-m="${x.m.id}" data-w="${w.id}" aria-label="Feldtyp des Codes" ${St().dis()}>${E.WERTTYPEN.map(([k, n, h]) => `<option value="${k}" ${t === k ? "selected" : ""} title="${esc(h)}">${n}</option>`).join("")}</select>
+            <span class="num">${K.Store.artikelQuelle === "applus" && w.apStamm !== false && K.Store.artikelZu(w.code) ? `<small class="kb-ap" title="Bezeichnung und Preis kommen aus APplus (ARTIKEL)">AP</small> ` : ""}${pr ? K.eur(pr) : "inkl."}${t === "zahl" ? ` <small>je ${esc(w.zahl?.einheit || "Einheit")}</small>` : ""}</span>
+            ${ro() ? "" : wahl && x.m.typ !== "mehrfach" ? `<button type="button" class="kb-stern${std ? " an" : ""}" data-act="kbStd" data-m="${x.m.id}" data-w="${w.id}" title="${std ? "Ist vorausgewählt" : "Als Vorauswahl festlegen"}" aria-label="Als Vorauswahl">${std ? "★" : "☆"}</button>` : t === "janein" ? `<button type="button" class="kb-stern${w.vorgabe ? " an" : ""}" data-act="kbJNVorgabe" data-m="${x.m.id}" data-w="${w.id}" title="${w.vorgabe ? "Ist vorab angekreuzt" : "Vorab ankreuzen"}" aria-label="Vorab ankreuzen">${w.vorgabe ? "★" : "☆"}</button>` : `<span></span>`}
+            ${ro() ? "" : `<button type="button" class="kb-x" data-act="kbWWeg" data-m="${x.m.id}" data-w="${w.id}" title="Vom Fahrzeug entfernen" aria-label="Entfernen">✕</button>`}
+            ${K.wertExtras(x.m, w, "kb")}</div>`; }).join("")}</div></article>`;
+    };
+    return `<div class="panel kb-objekt" data-drop="p:${p.id}">
+      <div class="eyebrow">${E.gruppenPfad(mo, p.gruppe).map(x => esc(x.name)).join(" › ") || "Ohne Familie"} ›</div>
+      <div class="kb-kopf"><input id="kb-pname" class="flach titelfeld" data-chg="kbPFeld" data-k="name" value="${esc(p.name)}" aria-label="Name" ${St().dis()}>
+        ${ro() ? "" : `<button type="button" class="btn klein gefahr-text" data-act="kbLoeschen">${K.kb.loeschen === "p:" + p.id ? "Wirklich löschen?" : "Löschen"}</button>`}</div>
+      <div class="formgitter kb-pfelder">
+        <div class="feld"><label>Artikelnummer</label><div class="wert"><code>${esc(p.code || "–")}</code>${K.Store.artikelQuelle ? (a ? ` <span class="gedimmt klein">${esc(a.name)}</span>` : ` <span class="warntext klein">nicht im Artikelstamm</span>`) : ""}</div></div>
+        <div class="feld"><label for="kb-ppreis">Grundpreis</label><input id="kb-ppreis" type="number" step="100" data-chg="kbPFeld" data-k="basispreis" value="${p.basispreis || 0}" ${St().dis()}></div>
+        <div class="feld"><label for="kb-pfam">Familie</label><select id="kb-pfam" data-act="kbPFam" ${St().dis()}>${mo.gruppen.map(x => `<option value="${x.id}" ${x.id === p.gruppe ? "selected" : ""}>${esc(E.gruppenPfad(mo, x.id).map(y => y.name).join(" › "))}</option>`).join("")}</select></div>
+        <div class="feld"><label class="haken"><input type="checkbox" data-act="kbPAktiv" ${p.aktiv !== false ? "checked" : ""} ${St().dis()}> im Katalog sichtbar</label></div></div>
+      <details class="kb-mehr"><summary>Beschreibung und Bild</summary><div class="formgitter"><div class="feld"><label for="kb-pbes">Beschreibung (Info im Katalog)</label><textarea id="kb-pbes" rows="3" data-chg="kbPFeld" data-k="beschreibung" ${St().dis()}>${esc(p.beschreibung || "")}</textarea></div>
+        <div class="feld"><label>Bild im Katalog</label>${bildFeld(p.bild, "kbBild", `data-s="p:${p.id}"`)}</div></div></details>
+      <div class="kb-codekopf"><h3>Vertriebscodes <span class="gedimmt">${codesVon(p)}</span></h3>
+        <input id="kb-csuche" type="search" data-in="kbCSuche" placeholder="Codes filtern" value="${esc(kb.codeSuche)}">
+        ${ro() ? "" : `<button class="btn klein" type="button" data-act="kbEinfuegen">${kb.einfuegen ? "Liste schließen" : "Liste einfügen"}</button><button class="btn klein" type="button" data-act="kbOrdnen" title="${esc(praefixe().ueber)}-Codes werden Überschriften, ${esc(praefixe().option)}-Codes Untergruppen, die übrigen Codes deren Auswahlmöglichkeiten">Nach Überschriften ordnen</button><button class="btn klein" type="button" data-act="kbMNeu">+ Gruppe</button>`}</div>
+      ${kb.einfuegen ? `<div class="kb-einfuegen"><label for="kb-liste" class="klein">Codes aus Excel kopieren und hier einfügen, eine Zeile pro Code. Steht ein Preis daneben, wird er übernommen.</label>
+        <textarea id="kb-liste" rows="6" data-in="kbListeText" placeholder="YY301&#9;3900&#10;YY302&#9;640&#10;7307464">${esc(kb.einfuegenText)}</textarea>
+        <div class="row"><label class="haken klein"><input type="checkbox" data-act="kbAuto" ${kb.auto !== false ? "checked" : ""}> nach ${esc(praefixe().ueber)}-Überschriften ordnen</label><label class="inline klein">sonst in <select id="kb-ziel1" data-act="kbZiel">${gruppenOpt}</select></label><button class="btn primary klein" type="button" data-act="kbListeUebernehmen">Codes übernehmen</button></div>
+        <p class="klein gedimmt">Spalten: Code, Bezeichnung, Preis (Reihenfolge egal). Die Reihenfolge der Zeilen bestimmt die Gliederung: ${esc(praefixe().ueber)}-Code = Überschrift (erscheint im Angebot), ${esc(praefixe().option)}-Code = Untergruppe, alle Codes darunter = Auswahlmöglichkeiten dieser Untergruppe.</p></div>` : ""}
+      <div class="kb-gruppen">${abschnittsweise(pm, karte, p) || `<div class="leer klein">Noch keine Codes. Ziehen Sie Artikel aus dem Artikelstamm hierher oder fügen Sie eine Liste ein.</div>`}
+        ${ro() ? "" : `<div class="kb-ablage klein" data-drop="m:__neu">Hierher ziehen = neue Gruppe</div>`}</div></div>`;
+  }
+
+  function pool(mo) {
+    const kb = K.kb, o = objekt(kb.sel), istFz = kb.sel[0] === "p", istFam = kb.sel[0] === "g", q = kb.poolSuche.trim();
+    const vorhanden = new Set(); if (istFz) for (const x of E.produktMerkmale(mo, o)) for (const w of x.werte) if (w.code) vorhanden.add(norm(w.code));
+    for (const p of mo.produkte) if (p.code && !istFz) vorhanden.add(norm(p.code));
+    // Verwendung: in wie vielen Fahrzeugen steckt der Artikel als Code oder ist er selbst ein Fahrzeug
+    const nutzung = new Map(); for (const p of mo.produkte) { if (p.code) nutzung.set(norm(p.code), "Fahrzeug"); for (const x of E.produktMerkmale(mo, p)) for (const w of x.werte) if (w.code) { const C = norm(w.code), alt = nutzung.get(C); if (alt !== "Fahrzeug") nutzung.set(C, (alt || 0) + 1); } }
+    let liste = [];
+    if (kb.poolTab === "artikel") {
+      if (K.Store.artikelQuelle) liste = (q ? K.Store.artikelSuche(q, 600) : [...K.Store.artikel.values()].slice(0, 300)).map(a => ({ code: a.code, name: a.name, preis: a.preis }));
+      if (kb.poolFilter === "frei") liste = liste.filter(a => !nutzung.has(norm(a.code))); else if (kb.poolFilter === "benutzt") liste = liste.filter(a => nutzung.has(norm(a.code)));
+      liste = liste.slice(0, 300);
+    } else {
+      const ql = q.toLowerCase(); for (const m of mo.merkmale) for (const w of m.werte) if (w.code && (!ql || (w.code + " " + w.name + " " + m.name).toLowerCase().includes(ql))) liste.push({ code: w.code, name: w.name, preis: w.preis, gruppe: m.name });
+      liste = liste.slice(0, 400);
+    }
+    const n = kb.poolWahl.size;
+    return `<aside class="panel kb-pool">
+      <div class="tabs-innen klein" role="tablist"><button type="button" role="tab" data-act="kbPoolTab" data-t="artikel" aria-selected="${kb.poolTab === "artikel"}">Artikelstamm</button><button type="button" role="tab" data-act="kbPoolTab" data-t="codes" aria-selected="${kb.poolTab === "codes"}">Codes im Modell</button></div>
+      ${kb.poolTab === "artikel" && K.Store.artikelQuelle ? `<div class="kb-filter" role="radiogroup" aria-label="Filter">${[["", "alle"], ["frei", "noch nicht verwendet"], ["benutzt", "schon verwendet"]].map(([k, n]) => `<button type="button" class="chipbtn" data-act="kbPoolFilter" data-f="${k}" aria-pressed="${(kb.poolFilter || "") === k}">${n}</button>`).join("")}</div>` : ""}
+      <input id="kb-psuche" type="search" data-in="kbPSuche" placeholder="${kb.poolTab === "artikel" ? "Artikelnummer oder Bezeichnung" : "Code, Bezeichnung oder Gruppe"}" value="${esc(kb.poolSuche)}" autocomplete="off">
+      ${kb.poolTab === "artikel" && !K.Store.artikelQuelle ? `<div class="hinweis klein">Kein Artikelstamm geladen. In APplus die Abfrage <code>queries.artikel</code> auf Tabelle ARTIKEL einrichten oder unter Excel-Import › Familien und Varianten eine Mappe mit Blatt „Import“ einlesen. Codes lassen sich auch über „Liste einfügen“ eintragen.</div>` : ""}
+      <div class="kb-poolaktion">${n ? `<b>${n}</b> ausgewählt · <button type="button" class="link" data-act="kbPoolLeer">aufheben</button>` : `<span class="gedimmt klein">Ankreuzen für mehrere, dann ziehen</span>`}
+        ${n && istFz && !ro() ? `<button class="btn primary klein" type="button" data-act="kbPoolZuFz">Zum Fahrzeug hinzufügen</button>` : ""}${n && istFam && !ro() ? `<button class="btn primary klein" type="button" data-act="kbPoolZuFam">Als Fahrzeuge hinzufügen</button><button class="btn klein" type="button" data-act="kbPoolCodesFam" title="Die angekreuzten Artikel werden Vertriebscodes, die jedes Fahrzeug dieser Familie erbt">Als Codes für die ganze Familie</button>` : ""}</div>
+      <ul class="kb-poolliste">${liste.map(a => { const da = vorhanden.has(norm(a.code)), an = kb.poolWahl.has(a.code);
+        return `<li class="${da ? "da" : ""}${an ? " an" : ""}" draggable="${!ro()}" data-drag="a:${esc(a.code)}"><label><input type="checkbox" data-act="kbPoolWahl" data-c="${esc(a.code)}" ${an ? "checked" : ""}><code>${esc(a.code)}</code><span>${esc(a.name)}${a.gruppe ? ` <i class="gedimmt">${esc(a.gruppe)}</i>` : ""}</span></label>${nutzung.has(norm(a.code)) ? `<span class="kb-nutz" title="${nutzung.get(norm(a.code)) === "Fahrzeug" ? "ist ein Fahrzeug im Katalog" : "als Code in " + nutzung.get(norm(a.code)) + " Fahrzeugen"}">${nutzung.get(norm(a.code)) === "Fahrzeug" ? "Fzg." : "×" + nutzung.get(norm(a.code))}</span>` : ""}<span class="num klein">${a.preis ? K.eur(a.preis) : ""}</span></li>`; }).join("")}</ul>
+      ${kb.poolTab === "artikel" && K.Store.artikelQuelle && !q ? `<p class="klein gedimmt">${K.zahl(K.Store.artikel.size)} Artikel. Suchen grenzt die Liste ein.</p>` : ""}
+      ${liste.length ? `<button type="button" class="link klein" data-act="kbPoolAlle">alle ${liste.length} angezeigten ankreuzen</button>` : ""}</aside>`;
+  }
+
+  /* ---------- Aktionen ---------- */
+  const A = K.act, I = K.inp;
+  A.kbWahl = el => { K.kb.sel = el.dataset.s; K.kb.loeschen = null; K.kb.codeSuche = ""; K.render(); };
+  A.kbAuf = el => { K.kb.offen[el.dataset.g] = !(K.kb.offen[el.dataset.g] ?? true); K.render(); };
+  A.kbFamNeu = el => {
+    const mo = ent(), eltern = el.dataset.g || null, g = { id: eindeutig("familie", mo.gruppen), name: "Neue Familie", eltern, merkmale: [] };
+    mo.gruppen.push(g); if (eltern) K.kb.offen[eltern] = true; K.kb.sel = "g:" + g.id; geaendert("Familie angelegt");
+    K.nach(v => { const f = v.querySelector("#kb-gname"); if (f) { f.focus(); f.select(); } });
+  };
+  I.kbGName = el => { const g = objekt(K.kb.sel); g.name = el.value.trim() || g.name; geaendert(`Familie „${g.name}“ umbenannt`); };
+  I.kbGBes = el => { const g = objekt(K.kb.sel); g.beschreibung = el.value; geaendert(`Beschreibung von ${g.name}`); };
+  A.kbGEltern = el => { const g = objekt(K.kb.sel); g.eltern = el.value || null; geaendert(`${g.name} verschoben`); };
+  A.kbBild = async el => { const o = objekt(el.dataset.s), id = await bildLesen(el); if (id === undefined) return; if (id) o.bild = id; else delete o.bild; geaendert(`Bild von ${o.name} ${id ? "hinterlegt" : "entfernt"}`); };
+  I.kbPFeld = el => { const p = objekt(K.kb.sel), k = el.dataset.k; p[k] = k === "basispreis" ? (+el.value || 0) : el.value; if (k === "basispreis" && K.Store.artikelZu(p.code)) p.apStamm = false; geaendert(`${p.name}: ${k === "basispreis" ? "Grundpreis" : k === "name" ? "Name" : "Beschreibung"} geändert`); };
+  A.kbPFam = el => { const p = objekt(K.kb.sel); p.gruppe = el.value; geaendert(`${p.name} nach ${gruppe(el.value)?.name} verschoben`); };
+  A.kbPAktiv = el => { const p = objekt(K.kb.sel); p.aktiv = el.checked; geaendert(`${p.name} ${el.checked ? "im Katalog sichtbar" : "ausgeblendet"}`); };
+  A.kbLoeschen = () => {
+    const kb = K.kb, mo = ent(); if (kb.loeschen !== kb.sel) { kb.loeschen = kb.sel; return K.render(); }
+    const o = objekt(kb.sel);
+    if (kb.sel[0] === "g") {
+      for (const k of kinder(o.id)) k.eltern = o.eltern || null; for (const p of fahrzeuge(o.id)) p.gruppe = o.eltern || (mo.gruppen.find(x => x.id !== o.id)?.id || "");
+      E.ausGeltungEntfernen(mo, [o.id], []); mo.gruppen = mo.gruppen.filter(g => g !== o);
+      geaendert(`Familie ${o.name} gelöscht, Inhalt eine Ebene höher`);
+    } else { E.ausGeltungEntfernen(mo, [], [o.id]); mo.produkte = mo.produkte.filter(p => p !== o); geaendert(`Fahrzeug ${o.name} gelöscht`); }
+    kb.sel = o.eltern ? "g:" + o.eltern : o.gruppe ? "g:" + o.gruppe : ""; kb.loeschen = null; K.render();
+  };
+  A.kbLeeren = () => {
+    const kb = K.kb; if (!kb.leeren) { kb.leeren = true; K.render(); setTimeout(() => { kb.leeren = false; }, 6000); return; }
+    const mo = ent(); Object.assign(mo, { gruppen: [], produkte: [], merkmale: [], regeln: [] }); kb.leeren = false; kb.sel = "";
+    geaendert("Entwurf geleert, Katalog wird neu aufgebaut");
+  };
+  A.kbVorschau = () => { K.kat.entwurf = true; K.kat.gruppe = K.kb.sel[0] === "g" ? K.kb.sel.slice(2) : ""; K.gehe("katalog"); };
+  // Codes und Gruppen am Fahrzeug
+  I.kbCSuche = el => { K.kb.codeSuche = el.value; K.render(); K.nach(v => { const f = v.querySelector("#kb-csuche"); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); } }); };
+  I.kbMName = el => { const m = E.merkmal(ent(), el.dataset.m); m.name = el.value.trim() || m.name; geaendert(`Gruppe „${m.name}“ umbenannt`); };
+  A.kbWTyp = el => { const m = E.merkmal(ent(), el.dataset.m), w = m.werte.find(v => v.id === el.dataset.w); E.wertTypSetzen(w, el.value); geaendert(`${w.code}: ${E.WERTTYPEN.find(x => x[0] === el.value)[1]}`); };
+  A.kbJNVorgabe = el => { const m = E.merkmal(ent(), el.dataset.m), w = m.werte.find(v => v.id === el.dataset.w); w.vorgabe = !w.vorgabe; geaendert(`${w.code} ${w.vorgabe ? "vorab angekreuzt" : "nicht vorab angekreuzt"}`); };
+  I.kbWName = el => { const m = E.merkmal(ent(), el.dataset.m), w = m.werte.find(v => v.id === el.dataset.w); w.name = el.value.trim() || w.name; if (K.Store.artikelZu(w.code)) w.apStamm = false; geaendert(`Bezeichnung von ${w.code} geändert`); };
+  /** Einstellungen eines Codes mit Feldtyp Zahl oder Text */
+  K.wertExtras = (m, w, px) => {
+    const t = E.wertTyp(m, w), d = St().dis(), attr = k => `data-chg="wertExtra" data-m="${m.id}" data-w="${w.id}" data-k="${k}"`;
+    if (t === "zahl") { const z = w.zahl || {}; return `<div class="kb-extras">${[["einheit", "Einheit", "text", z.einheit], ["min", "von", "number", z.min], ["max", "bis", "number", z.max], ["schritt", "Schritt", "number", z.schritt], ["standard", "Vorgabe", "number", z.standard]].map(([k, n, ty, v]) => `<label>${n} <input id="${px}-z-${m.id}-${w.id}-${k}" type="${ty}" class="kurz" data-g="zahl" ${attr(k)} value="${esc(v ?? "")}" ${d}></label>`).join("")}</div>`; }
+    if (t === "text") { const x = w.text || {}; return `<div class="kb-extras"><label>max. Zeichen <input id="${px}-t-${m.id}-${w.id}-l" type="number" class="kurz" data-g="text" ${attr("maxLaenge")} value="${esc(x.maxLaenge ?? 60)}" ${d}></label><label>Hinweis im Feld <input id="${px}-t-${m.id}-${w.id}-h" data-g="text" ${attr("hinweis")} value="${esc(x.hinweis || "")}" placeholder="z. B. Firmenname" ${d}></label></div>`; }
+    return "";
+  };
+  I.wertExtra = el => { const m = E.merkmal(ent(), el.dataset.m), w = m.werte.find(v => v.id === el.dataset.w), g = el.dataset.g, k = el.dataset.k; w[g] ||= {}; w[g][k] = el.type === "number" ? (el.value === "" ? null : Number(el.value)) : el.value; geaendert(`${w.code}: ${k} geändert`); };
+  A.kbMTyp = el => { const m = E.merkmal(ent(), el.dataset.m); E.feldtypSetzen(m, el.value); geaendert(`${m.name}: ${E.FELDTYPEN.find(x => x[0] === el.value)[1]}`); };
+  A.kbHoch = () => { const g = objekt(K.kb.sel), n = E.hochziehen(ent(), g.id); geaendert(`Gemeinsame Struktur an ${g.name} übergeben`); K.toast(n ? `${n} Gruppen gelten jetzt für die ganze Familie` : "Die Fahrzeuge haben keine gemeinsamen Gruppen"); };
+  A.kbMPflicht = el => { const m = E.merkmal(ent(), el.dataset.m); m.pflicht = el.checked; geaendert(`${m.name}: ${el.checked ? "Pflichtangabe" : "mit Vorauswahl"}`); };
+  A.kbStd = el => { const p = objekt(K.kb.sel), mid = el.dataset.m; p.merkmale ||= []; let z = p.merkmale.find(x => x.id === mid && !x.aus); if (!z) { z = { id: mid }; p.merkmale.push(z); } z.standard = el.dataset.w; const m = E.merkmal(ent(), mid); if (m.pflicht) m.pflicht = false; geaendert(`Vorauswahl bei ${m.name} geändert`); };
+  /** Zusatzeinstellungen je Feldtyp (Zahl: Einheit, Grenzen; Text: Länge, Hinweis) */
+  K.feldtypExtras = (m, px) => {
+    const t = E.feldtyp(m), d = St().dis();
+    if (t === "zahl") { const z = m.zahl || {}; return `<div class="kb-extras">${[["einheit", "Einheit", "text", z.einheit], ["min", "von", "number", z.min], ["max", "bis", "number", z.max], ["schritt", "Schritt", "number", z.schritt], ["standard", "Vorgabe", "number", z.standard]].map(([k, n, ty, v]) => `<label class="inline klein">${n} <input id="${px}-z-${m.id}-${k}" type="${ty}" class="kurz" data-chg="feldExtra" data-m="${m.id}" data-g="zahl" data-k="${k}" value="${esc(v ?? "")}" ${d}></label>`).join("")}<span class="gedimmt klein">Preis des Codes gilt je Einheit</span></div>`; }
+    if (t === "text") { const x = m.text || {}; return `<div class="kb-extras"><label class="inline klein">max. Zeichen <input id="${px}-t-${m.id}-l" type="number" class="kurz" data-chg="feldExtra" data-m="${m.id}" data-g="text" data-k="maxLaenge" value="${esc(x.maxLaenge ?? 60)}" ${d}></label><label class="inline klein">Hinweis im Feld <input id="${px}-t-${m.id}-h" data-chg="feldExtra" data-m="${m.id}" data-g="text" data-k="hinweis" value="${esc(x.hinweis || "")}" placeholder="z. B. Firmenname" ${d}></label><span class="gedimmt klein">Erster Code liefert Preis und Code fürs Angebot</span></div>`; }
+    if (t === "fest") return `<div class="kb-extras"><span class="gedimmt klein">Alle Codes sind immer enthalten und stehen im Angebot unter der Überschrift.</span></div>`;
+    return "";
+  };
+  I.feldExtra = el => { const m = E.merkmal(ent(), el.dataset.m), g = el.dataset.g, k = el.dataset.k; m[g] ||= {}; m[g][k] = el.type === "number" ? (el.value === "" ? null : Number(el.value)) : el.value; geaendert(`${m.name}: ${k} geändert`); };
+  A.kbMNeu = () => { const p = objekt(K.kb.sel), m = merkmalNeu("Neue Gruppe", false); (p.merkmale ||= []).push({ id: m.id, werte: [] }); geaendert("Gruppe angelegt"); K.nach(v => { const f = v.querySelector("#kb-mn-" + m.id); if (f) { f.focus(); f.select(); } }); };
+  A.kbMWeg = el => { const p = objekt(K.kb.sel), mid = el.dataset.m; p.merkmale ||= []; const z = p.merkmale.find(x => x.id === mid); if (z) { z.aus = true; delete z.werte; } else p.merkmale.push({ id: mid, aus: true }); geaendert(`Gruppe bei ${p.name} ausgeblendet`); };
+  A.kbWWeg = el => { const p = objekt(K.kb.sel); vomFahrzeug(p, el.dataset.m, el.dataset.w); geaendert(`Code bei ${p.name} entfernt`); };
+  A.kbEinfuegen = () => { K.kb.einfuegen = !K.kb.einfuegen; K.render(); if (K.kb.einfuegen) K.nach(v => v.querySelector("#kb-liste")?.focus()); };
+  I.kbListeText = el => { K.kb.einfuegenText = el.value; };
+  A.kbZiel = el => { K.kb.ziel = el.value; };
+  A.kbListeUebernehmen = () => {
+    const p = objekt(K.kb.sel), preise = new Map(), namen = new Map(), codes = [];
+    const istZahl = t => /^-?[\d.,]+\s*(€|EUR)?$/i.test(t);
+    for (const zeile of K.kb.einfuegenText.split(/\r?\n/)) {
+      const teile = zeile.split(/\t|;|\s{2,}/).map(s => s.trim()).filter(Boolean); if (!teile.length) continue;
+      const code = teile[0]; if (!code || /^(code|vertriebscode|artikel)$/i.test(code)) continue;
+      codes.push(code);
+      const z = teile.slice(1).find(istZahl); if (z != null) preise.set(norm(code), K.X.zahl(z));
+      const t = teile.slice(1).find(x => !istZahl(x) && /[a-zäöü]{2}/i.test(x)); if (t) namen.set(norm(code), t);
+    }
+    if (!codes.length) return K.toast("Keine Codes gefunden.");
+    const r = codesZuFahrzeug(p, codes, K.kb.ziel, preise, namen); K.kb.einfuegenText = ""; K.kb.einfuegen = false;
+    mitOrdnen(p, codes, r);
+  };
+  const ordnenText = st => st ? `Geordnet: ${st.abschnitte} Überschriften, ${st.auswahl} Auswahlen, ${st.optionen} Gruppen mit Optionen${st.fest ? `, ${st.fest} Codes fest in der Grundausstattung` : ""}` : "Keine Codes zum Ordnen";
+  A.kbOrdnen = () => { const p = objekt(K.kb.sel), st = strukturieren(p); geaendert(`Codes von ${p.name} nach Überschriften geordnet`); K.toast(ordnenText(st)); };
+  A.kbAuto = el => { K.kb.auto = el.checked; };
+  I.kbAbName = el => { const p = objekt(K.kb.sel), alt = el.dataset.ab, neu = el.value.trim(); if (!neu || neu === alt) return;
+    for (const x of E.produktMerkmale(ent(), p)) if ((x.m.abschnitt || "") === alt) { x.m.abschnitt = neu; if (x.m.name === alt) x.m.name = neu; else if (x.m.name.startsWith(alt + " – ")) x.m.name = neu + x.m.name.slice(alt.length); }
+    for (const g of p.grundausstattung || []) if (g.gruppe === alt) g.gruppe = neu;
+    geaendert(`Überschrift „${neu}“`); };
+  A.kbGaWeg = el => { const p = objekt(K.kb.sel); p.grundausstattung.splice(+el.dataset.i, 1); geaendert(`Grundausstattung von ${p.name} geändert`); };
+  function meldung(p, r) {
+    geaendert(`${r.neu} neue Codes bei ${p.name}`);
+    const t = [r.neu ? `${r.neu} neue Codes` : "", r.schon ? `${r.schon} waren schon da` : "", r.anders ? `${r.anders} stehen bereits in einer anderen Gruppe und bleiben dort` : ""].filter(Boolean).join(", ");
+    K.toast(t || "Codes hinzugefügt");
+    if (r.neuGruppe) K.nach(v => { const f = v.querySelector("#kb-mn-" + r.neuGruppe.id); if (f) { f.focus(); f.select(); } });
+  }
+  // Baukasten
+  A.kbPoolTab = el => { K.kb.poolTab = el.dataset.t; K.kb.poolWahl.clear(); K.render(); };
+  I.kbPSuche = el => { K.kb.poolSuche = el.value; K.render(); K.nach(v => { const f = v.querySelector("#kb-psuche"); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); } }); };
+  A.kbPoolWahl = el => { const s = K.kb.poolWahl; el.checked ? s.add(el.dataset.c) : s.delete(el.dataset.c); K.render(); };
+  A.kbPoolLeer = () => { K.kb.poolWahl.clear(); K.render(); };
+  A.kbPoolAlle = () => { K.root.querySelectorAll(".kb-poolliste input[data-c]").forEach(i => K.kb.poolWahl.add(i.dataset.c)); K.render(); };
+  const mitOrdnen = (p, codes, r) => { if (K.kb.auto !== false && (codes.some(c => norm(c).startsWith(norm(praefixe().ueber))) || p.codeFolge)) { if (!p.codeFolge || codes.some(c => norm(c).startsWith(norm(praefixe().ueber)))) p.codeFolge = [...(p.codeFolge || []), ...codes]; const st = strukturieren(p); geaendert(`${codes.length} Codes bei ${p.name} eingefügt und geordnet`); return K.toast(ordnenText(st)); } meldung(p, r); };
+  A.kbPoolZuFz = () => { const p = objekt(K.kb.sel), codes = [...K.kb.poolWahl], r = codesZuFahrzeug(p, codes, K.kb.ziel); K.kb.poolWahl.clear(); mitOrdnen(p, codes, r); };
+  A.kbPoolFilter = el => { K.kb.poolFilter = el.dataset.f; K.render(); };
+  A.kbPoolCodesFam = () => { const g = objekt(K.kb.sel), codes = [...K.kb.poolWahl]; g.merkmale ||= []; const r = codesZuFahrzeug(g, codes, K.kb.ziel); K.kb.poolWahl.clear(); geaendert(`${r.neu + codes.length - r.neu} Codes an Familie ${g.name}`); K.toast(`${codes.length} Codes gelten jetzt für alle Fahrzeuge in ${g.name}${r.schon ? ` (${r.schon} waren schon da)` : ""}`); };
+  A.kbPoolZuFam = () => { const g = objekt(K.kb.sel), r = fahrzeugeAnlegen(g.id, [...K.kb.poolWahl]); K.kb.poolWahl.clear(); geaendert(`${r.neu} Fahrzeuge in ${g.name} angelegt`); K.toast(`${r.neu} Fahrzeuge angelegt${r.verschoben ? `, ${r.verschoben} hierher verschoben` : ""}`); };
+
+  /* ---------- Drag & Drop ---------- */
+  let zug = null; // { art: "g"|"p"|"a"|"w"|"m", ids: [...] }
+  const imBau = e => K.root && K.root.contains(e.target) && K.aktuell() === "studio-katalog" && !ro();
+  const lage = (e, el) => { const r = el.getBoundingClientRect(), y = (e.clientY - r.top) / r.height; return y < .28 ? "vor" : y > .72 ? "nach" : "in"; };
+  function erlaubt(z, ziel, pos) {
+    if (!z || !ziel) return null; const [t, id] = [ziel.slice(0, 1), ziel.slice(2)];
+    if (z.art === "g") { if (t !== "g") return null; if (id && (id === z.ids[0] || istUnter(z.ids[0], id))) return null; return id ? pos : "in"; }
+    if (z.art === "p") { if (t === "g") return id ? "in" : null; if (t === "p") return pos === "in" ? "nach" : pos; return null; }
+    if (z.art === "a") { if (t === "g") return id ? "in" : null; if (t === "p" || t === "m") return "in"; return null; }
+    if (z.art === "w") { if (t === "p" || t === "m") return "in"; return null; }
+    if (z.art === "m") { if (t === "m" && id !== z.ids[0] && id !== "__neu") return pos === "in" ? "vor" : pos; return null; }
+    return null;
+  }
+  document.addEventListener("dragstart", e => {
+    if (!imBau(e)) return; const el = e.target.closest && e.target.closest("[data-drag]"); if (!el) return;
+    const d = el.dataset.drag, art = d[0]; let ids = [d.slice(2)];
+    if (art === "a" && K.kb.poolWahl.has(ids[0])) ids = [...K.kb.poolWahl];
+    if (art === "a" && !K.kb.poolWahl.has(ids[0]) && K.kb.poolWahl.size) ids = [ids[0]];
+    zug = { art, ids }; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", ids.join("\n")); } catch (x) {}
+    if (ids.length > 1) { const b = document.createElement("div"); b.className = "kb-ziehbild"; b.textContent = `${ids.length} Artikel`; document.body.appendChild(b); e.dataTransfer.setDragImage(b, 10, 10); setTimeout(() => b.remove(), 0); }
+    el.classList.add("kb-zieht"); e.stopPropagation();
+  });
+  document.addEventListener("dragend", () => { zug = null; K.root && K.root.querySelectorAll(".kb-zieht,.kb-in,.kb-vor,.kb-nach").forEach(x => x.classList.remove("kb-zieht", "kb-in", "kb-vor", "kb-nach")); });
+  let markiert = null;
+  document.addEventListener("dragover", e => {
+    if (!zug || !imBau(e)) return; const el = e.target.closest("[data-drop]"); if (!el) return;
+    const pos = erlaubt(zug, el.dataset.drop, lage(e, el)); if (!pos) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = "move";
+    if (markiert && markiert !== el) markiert.classList.remove("kb-in", "kb-vor", "kb-nach");
+    el.classList.remove("kb-in", "kb-vor", "kb-nach"); el.classList.add("kb-" + pos); markiert = el;
+  });
+  document.addEventListener("dragleave", e => { const el = e.target.closest && e.target.closest("[data-drop]"); if (el && !el.contains(e.relatedTarget)) el.classList.remove("kb-in", "kb-vor", "kb-nach"); });
+  document.addEventListener("drop", e => {
+    if (!zug || !imBau(e)) return; const el = e.target.closest("[data-drop]"); if (!el) return;
+    const ziel = el.dataset.drop, pos = erlaubt(zug, ziel, lage(e, el)); if (!pos) return;
+    e.preventDefault(); const z = zug; zug = null; ablegen(z, ziel, pos);
+  });
+  function ablegen(z, ziel, pos) {
+    const mo = ent(), t = ziel[0], id = ziel.slice(2);
+    if (z.art === "g") {
+      const g = gruppe(z.ids[0]), zg = gruppe(id);
+      if (!zg || pos === "in") { g.eltern = zg ? zg.id : null; umsetzen(mo.gruppen, g, null); if (zg) K.kb.offen[zg.id] = true; }
+      else { g.eltern = zg.eltern || null; umsetzen(mo.gruppen, g, zg, pos === "nach"); }
+      return geaendert(`${g.name} verschoben`);
+    }
+    if (z.art === "p") {
+      const p = E.produkt(mo, z.ids[0]);
+      if (t === "g") { p.gruppe = id; umsetzen(mo.produkte, p, null); K.kb.offen[id] = true; return geaendert(`${p.name} nach ${gruppe(id).name} verschoben`); }
+      const zp = E.produkt(mo, id); if (!zp || zp === p) return; p.gruppe = zp.gruppe; umsetzen(mo.produkte, p, zp, pos === "nach"); return geaendert(`${p.name} einsortiert`);
+    }
+    if (z.art === "a") {
+      K.kb.poolWahl.clear();
+      if (t === "g") { const r = fahrzeugeAnlegen(id, z.ids); K.kb.offen[id] = true; geaendert(`${r.neu} Fahrzeuge in ${gruppe(id).name} angelegt`); return K.toast(`${r.neu} Fahrzeuge angelegt${r.verschoben ? `, ${r.verschoben} hierher verschoben` : ""}${z.ids.length - r.neu - r.verschoben ? `, ${z.ids.length - r.neu - r.verschoben} waren schon da` : ""}`); }
+      const p = t === "p" ? E.produkt(mo, id) : objekt(K.kb.sel); if (!p || K.kb.sel[0] !== "p" && t === "m") return;
+      return mitOrdnen(p, z.ids, codesZuFahrzeug(p, z.ids, t === "m" ? id : ""));
+    }
+    if (z.art === "w") {
+      const [mid, wid] = z.ids[0].split(":"), m = E.merkmal(mo, mid), w = m && m.werte.find(x => x.id === wid); if (!w) return;
+      const p = t === "p" ? E.produkt(mo, id) : objekt(K.kb.sel); if (!p) return;
+      if (t === "p" || (t === "m" && id === mid)) { if (p.id === K.kb.sel.slice(2) && t === "p") return; amFahrzeug(p, m, w); return geaendert(`${w.code} zu ${p.name}`); }
+      // in eine andere Gruppe verschieben
+      const nutzer = mo.produkte.filter(x => x !== p && E.produktMerkmale(mo, x).some(y => y.werte.includes(w)));
+      if (nutzer.length) return K.toast(`${w.code} wird auch bei ${nutzer.length} anderen Fahrzeugen verwendet (z. B. ${nutzer[0].name}) und bleibt in „${m.name}“.`);
+      const zm = id === "__neu" ? merkmalNeu("Neue Gruppe", m.typ === "mehrfach") : E.merkmal(mo, id); if (!zm) return;
+      vomFahrzeug(p, mid, wid); m.werte = m.werte.filter(x => x !== w);
+      for (const o of [...mo.gruppen, ...mo.produkte]) for (const zz of o.merkmale || []) if (zz.id === mid && zz.werte) zz.werte = zz.werte.filter(x => x !== wid);
+      einfrieren(zm); if (zm.werte.some(x => x.id === w.id)) w.id = eindeutig(w.id, zm.werte); zm.werte.push(w); amFahrzeug(p, zm, w);
+      geaendert(`${w.code} nach „${zm.name}“ verschoben`);
+      if (id === "__neu") K.nach(v => { const f = v.querySelector("#kb-mn-" + zm.id); if (f) { f.focus(); f.select(); } });
+      return;
+    }
+    if (z.art === "m") {
+      const p = objekt(K.kb.sel); if (!p || K.kb.sel[0] !== "p") return;
+      const ordnung = E.zuordnung(mo, p).map(x => x.id), von = z.ids[0];
+      const ohne = ordnung.filter(x => x !== von); let j = ohne.indexOf(id); if (j < 0) return; if (pos === "nach") j++; ohne.splice(j, 0, von);
+      p.reihenfolge = ohne; geaendert(`Reihenfolge der Gruppen bei ${p.name} geändert`);
+    }
+  }
+})(window);
