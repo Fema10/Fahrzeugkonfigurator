@@ -300,34 +300,39 @@
         ${ro() ? "" : `<div class="kb-ablage klein" data-drop="m:__neu">Hierher ziehen = neue Gruppe</div>`}</div></div>`;
   }
 
-  function pool(mo) {
-    const kb = K.kb, o = objekt(kb.sel), istFz = kb.sel[0] === "p", istFam = kb.sel[0] === "g", q = kb.poolSuche.trim();
-    const vorhanden = new Set(); if (istFz) for (const x of E.produktMerkmale(mo, o)) for (const w of x.werte) if (w.code) vorhanden.add(norm(w.code));
-    for (const p of mo.produkte) if (p.code && !istFz) vorhanden.add(norm(p.code));
-    // Verwendung: in wie vielen Fahrzeugen steckt der Artikel als Code oder ist er selbst ein Fahrzeug
-    const nutzung = new Map(); for (const p of mo.produkte) { if (p.code) nutzung.set(norm(p.code), "Fahrzeug"); for (const x of E.produktMerkmale(mo, p)) for (const w of x.werte) if (w.code) { const C = norm(w.code), alt = nutzung.get(C); if (alt !== "Fahrzeug") nutzung.set(C, (alt || 0) + 1); } }
-    let liste = [];
-    if (kb.poolTab === "artikel") {
-      if (K.Store.artikelQuelle) liste = (q ? K.Store.artikelSuche(q, 600) : [...K.Store.artikel.values()].slice(0, 300)).map(a => ({ code: a.code, name: a.name, preis: a.preis }));
-      if (kb.poolFilter === "frei") liste = liste.filter(a => !nutzung.has(norm(a.code))); else if (kb.poolFilter === "benutzt") liste = liste.filter(a => nutzung.has(norm(a.code)));
-      liste = liste.slice(0, 300);
-    } else {
-      const ql = q.toLowerCase(); for (const m of mo.merkmale) for (const w of m.werte) if (w.code && (!ql || (w.code + " " + w.name + " " + m.name).toLowerCase().includes(ql))) liste.push({ code: w.code, name: w.name, preis: w.preis, gruppe: m.name });
-      liste = liste.slice(0, 400);
-    }
-    const n = kb.poolWahl.size;
-    return `<aside class="panel kb-pool">
-      <div class="tabs-innen klein" role="tablist"><button type="button" role="tab" data-act="kbPoolTab" data-t="artikel" aria-selected="${kb.poolTab === "artikel"}">Artikelstamm</button><button type="button" role="tab" data-act="kbPoolTab" data-t="codes" aria-selected="${kb.poolTab === "codes"}">Codes im Modell</button></div>
-      ${kb.poolTab === "artikel" && K.Store.artikelQuelle ? `<div class="kb-filter" role="radiogroup" aria-label="Filter">${[["", "alle"], ["frei", "noch nicht verwendet"], ["benutzt", "schon verwendet"]].map(([k, n]) => `<button type="button" class="chipbtn" data-act="kbPoolFilter" data-f="${k}" aria-pressed="${(kb.poolFilter || "") === k}">${n}</button>`).join("")}</div>` : ""}
-      <input id="kb-psuche" type="search" data-in="kbPSuche" placeholder="${kb.poolTab === "artikel" ? "Artikelnummer oder Bezeichnung" : "Code, Bezeichnung oder Gruppe"}" value="${esc(kb.poolSuche)}" autocomplete="off">
-      ${kb.poolTab === "artikel" && !K.Store.artikelQuelle ? `<div class="hinweis klein">Kein Artikelstamm geladen. In APplus die Abfrage <code>queries.artikel</code> auf Tabelle ARTIKEL einrichten oder unter Excel-Import › Familien und Varianten eine Mappe mit Blatt „Import“ einlesen. Codes lassen sich auch über „Liste einfügen“ eintragen.</div>` : ""}
-      <div class="kb-poolaktion">${n ? `<b>${n}</b> ausgewählt · <button type="button" class="link" data-act="kbPoolLeer">aufheben</button>` : `<span class="gedimmt klein">Ankreuzen für mehrere, dann ziehen</span>`}
-        ${n && istFz && !ro() ? `<button class="btn primary klein" type="button" data-act="kbPoolZuFz">Zum Fahrzeug hinzufügen</button>` : ""}${n && istFam && !ro() ? `<button class="btn primary klein" type="button" data-act="kbPoolZuFam">Als Fahrzeuge hinzufügen</button><button class="btn klein" type="button" data-act="kbPoolCodesFam" title="Die angekreuzten Artikel werden Vertriebscodes, die jedes Fahrzeug dieser Familie erbt">Als Codes für die ganze Familie</button>` : ""}</div>
-      <ul class="kb-poolliste">${liste.map(a => { const da = vorhanden.has(norm(a.code)), an = kb.poolWahl.has(a.code);
-        return `<li class="${da ? "da" : ""}${an ? " an" : ""}" draggable="${!ro()}" data-drag="a:${esc(a.code)}"><label><input type="checkbox" data-act="kbPoolWahl" data-c="${esc(a.code)}" ${an ? "checked" : ""}><code>${esc(a.code)}</code><span>${esc(a.name)}${a.gruppe ? ` <i class="gedimmt">${esc(a.gruppe)}</i>` : ""}</span></label>${nutzung.has(norm(a.code)) ? `<span class="kb-nutz" title="${nutzung.get(norm(a.code)) === "Fahrzeug" ? "ist ein Fahrzeug im Katalog" : "als Code in " + nutzung.get(norm(a.code)) + " Fahrzeugen"}">${nutzung.get(norm(a.code)) === "Fahrzeug" ? "Fzg." : "×" + nutzung.get(norm(a.code))}</span>` : ""}<span class="num klein">${a.preis ? K.eur(a.preis) : ""}</span></li>`; }).join("")}</ul>
-      ${kb.poolTab === "artikel" && K.Store.artikelQuelle && !q ? `<p class="klein gedimmt">${K.zahl(K.Store.artikel.size)} Artikel. Suchen grenzt die Liste ein.</p>` : ""}
-      ${liste.length ? `<button type="button" class="link klein" data-act="kbPoolAlle">alle ${liste.length} angezeigten ankreuzen</button>` : ""}</aside>`;
+  /* Artikelsuche rechts: nur ein Suchfeld mit Vorschlägen (Autocomplete). Treffer per „Übernehmen“,
+     Enter oder Ziehen in den Katalog. Gesucht wird im APplus-Artikelstamm und in den Codes des Modells. */
+  function treffer(mo, q) {
+    q = q.trim(); if (!q) return [];
+    const out = [], gesehen = new Set(), ql = q.toLowerCase();
+    if (K.Store.artikelQuelle) for (const a of K.Store.artikelSuche(q, 40)) { const C = norm(a.code); if (gesehen.has(C)) continue; gesehen.add(C); out.push({ code: a.code, name: a.name, preis: a.preis }); }
+    for (const m of mo.merkmale) for (const w of m.werte) { if (!w.code || out.length >= 40) continue; const C = norm(w.code); if (gesehen.has(C) || !(w.code + " " + w.name).toLowerCase().includes(ql)) continue; gesehen.add(C); out.push({ code: w.code, name: w.name, preis: w.preis, gruppe: m.name }); }
+    const vorn = out.filter(x => x.code.toLowerCase().startsWith(ql)); return [...vorn, ...out.filter(x => !vorn.includes(x))].slice(0, 40);
   }
+  function pool(mo) {
+    const kb = K.kb, o = objekt(kb.sel), istFz = kb.sel[0] === "p", istFam = kb.sel[0] === "g", q = kb.poolSuche;
+    const vorhanden = new Set(); if (o && (istFz || istFam)) for (const x of istFz ? E.produktMerkmale(mo, o) : (o.merkmale || []).map(z => ({ werte: (E.merkmal(mo, z.id)?.werte || []).filter(w => !z.werte || z.werte.includes(w.id)) }))) for (const w of x.werte) if (w.code) vorhanden.add(norm(w.code));
+    const nutzung = new Map(); for (const p of mo.produkte) { if (p.code) nutzung.set(norm(p.code), "Fahrzeug"); for (const x of E.produktMerkmale(mo, p)) for (const w of x.werte) if (w.code) { const C = norm(w.code), alt = nutzung.get(C); if (alt !== "Fahrzeug") nutzung.set(C, (alt || 0) + 1); } }
+    const liste = treffer(mo, q), ziel = !ro() && o && (istFz || istFam), neu = liste.filter(a => !vorhanden.has(norm(a.code)));
+    if (kb.acIdx >= liste.length) kb.acIdx = Math.max(0, liste.length - 1);
+    const zielText = istFz ? `Ziel: <b>${esc(o.name)}</b>${kb.ziel && E.merkmal(mo, kb.ziel) ? ` › ${esc(E.merkmal(mo, kb.ziel).name)}` : ""}` : istFam ? `Ziel: Familie <b>${esc(o.name)}</b> (gilt für alle Fahrzeuge darin)` : "Links ein Fahrzeug oder eine Familie wählen.";
+    return `<aside class="panel kb-pool">
+      <h3 class="kb-pooltitel">Codes hinzufügen</h3>
+      <div class="kb-ac">
+        <input id="kb-psuche" type="search" data-in="kbPSuche" role="combobox" aria-autocomplete="list" aria-expanded="${!!liste.length}" aria-controls="kb-ac-liste" ${liste.length ? `aria-activedescendant="kb-ac-${kb.acIdx || 0}"` : ""} aria-label="Artikel suchen" placeholder="Artikelnummer oder Bezeichnung" value="${esc(q)}" autocomplete="off">
+        ${q.trim() ? (liste.length ? `<ul id="kb-ac-liste" class="kb-ac-liste" role="listbox">${liste.map((a, i) => { const da = vorhanden.has(norm(a.code)), nz = nutzung.get(norm(a.code));
+          return `<li id="kb-ac-${i}" role="option" aria-selected="${i === (kb.acIdx || 0)}" class="${da ? "da" : ""}" draggable="${!ro()}" data-drag="a:${esc(a.code)}" data-act="kbAcZeile" data-i="${i}">
+            <span class="kb-ac-text"><code>${esc(a.code)}</code> <span>${esc(a.name || "")}</span>${a.gruppe ? ` <i class="gedimmt">${esc(a.gruppe)}</i>` : ""}</span>
+            <span class="kb-ac-info">${da ? `<span class="kb-nutz">schon drin</span>` : nz ? `<span class="kb-nutz" title="${nz === "Fahrzeug" ? "ist ein Fahrzeug im Katalog" : "als Code in " + nz + " Fahrzeugen"}">${nz === "Fahrzeug" ? "Fzg." : "×" + nz}</span>` : ""}<span class="num klein">${a.preis ? K.eur(a.preis) : ""}</span></span>
+            ${ziel && !da ? `<span class="kb-ac-knopf">${istFam ? `<button type="button" class="btn klein ghost" data-act="kbAlsFz" data-c="${esc(a.code)}" title="Als Fahrzeug in dieser Familie anlegen">als Fahrzeug</button>` : ""}<button type="button" class="btn klein primary" data-act="kbUebernehmen" data-c="${esc(a.code)}">Übernehmen</button></span>` : ""}</li>`; }).join("")}</ul>`
+          : `<p class="kb-ac-leer klein">Kein Artikel gefunden.</p>`) : ""}
+      </div>
+      <p class="klein ${ziel ? "" : "gefahr-text"}">${zielText}</p>
+      ${q.trim() && ziel && neu.length > 1 ? `<button type="button" class="btn klein" data-act="kbAlleUebernehmen">Alle ${neu.length} neuen Treffer übernehmen</button>` : ""}
+      ${!q.trim() ? `<p class="klein gedimmt">Tippen, dann mit <b>Übernehmen</b>, <kbd>Enter</kbd> oder per Ziehen in den Katalog. <kbd>↑</kbd> <kbd>↓</kbd> wählen den Vorschlag.${istFz ? " Ziehen auf eine Gruppe legt den Code dort ab." : ""}</p>` : ""}
+      ${!K.Store.artikelQuelle ? `<div class="hinweis klein">Kein Artikelstamm geladen, gesucht wird nur in den Codes des Modells. In APplus die Abfrage <code>queries.artikel</code> auf Tabelle ARTIKEL einrichten oder unter Excel-Import eine Mappe mit Blatt „Import“ einlesen.</div>` : ""}</aside>`;
+  }
+
 
   /* ---------- Aktionen ---------- */
   const A = K.act, I = K.inp;
@@ -417,14 +422,35 @@
     geaendert(`Überschrift „${neu}“`); };
   A.kbGaWeg = el => { const p = objekt(K.kb.sel); p.grundausstattung.splice(+el.dataset.i, 1); geaendert(`Grundausstattung von ${p.name} geändert`); };
   function meldung(p, r) {
-    geaendert(`${r.neu} neue Codes bei ${p.name}`);
-    const t = [r.neu ? `${r.neu} neue Codes` : "", r.schon ? `${r.schon} waren schon da` : "", r.anders ? `${r.anders} stehen bereits in einer anderen Gruppe und bleiben dort` : ""].filter(Boolean).join(", ");
+    geaendert(`${r.neu === 1 ? "1 neuer Code" : r.neu + " neue Codes"} bei ${p.name}`);
+    const t = [r.neu ? (r.neu === 1 ? "1 neuer Code" : `${r.neu} neue Codes`) : "", r.schon ? `${r.schon} waren schon da` : "", r.anders ? `${r.anders} stehen bereits in einer anderen Gruppe und bleiben dort` : ""].filter(Boolean).join(", ");
     K.toast(t || "Codes hinzugefügt");
     if (r.neuGruppe) K.nach(v => { const f = v.querySelector("#kb-mn-" + r.neuGruppe.id); if (f) { f.focus(); f.select(); } });
   }
   // Baukasten
   A.kbPoolTab = el => { K.kb.poolTab = el.dataset.t; K.kb.poolWahl.clear(); K.render(); };
-  I.kbPSuche = el => { K.kb.poolSuche = el.value; K.render(); K.nach(v => { const f = v.querySelector("#kb-psuche"); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); } }); };
+  const sucheFokus = () => K.nach(v => { const f = v.querySelector("#kb-psuche"); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); v.querySelector('.kb-ac-liste [aria-selected="true"]')?.scrollIntoView({ block: "nearest" }); } });
+  I.kbPSuche = el => { K.kb.poolSuche = el.value; K.kb.acIdx = 0; K.render(); sucheFokus(); };
+  /** Codes an das gewählte Fahrzeug bzw. die Familie hängen, danach Suchfeld leeren für den nächsten Code */
+  const uebernehmen = codes => {
+    const o = objekt(K.kb.sel), t = K.kb.sel[0]; if (!o || ro() || !codes.length) return;
+    K.kb.poolSuche = ""; K.kb.acIdx = 0;
+    if (t === "p") mitOrdnen(o, codes, codesZuFahrzeug(o, codes, K.kb.ziel));
+    else if (t === "g") { o.merkmale ||= []; const r = codesZuFahrzeug(o, codes, K.kb.ziel); geaendert(`${codes.length} Codes an Familie ${o.name}`); K.toast(`${codes.length === 1 ? codes[0] + " gilt" : codes.length + " Codes gelten"} jetzt für alle Fahrzeuge in ${o.name}${r.schon ? ` (${r.schon} waren schon da)` : ""}`); }
+    else return;
+    K.render(); sucheFokus();
+  };
+  A.kbUebernehmen = (el, e) => { e?.stopPropagation?.(); uebernehmen([el.dataset.c]); };
+  A.kbAlleUebernehmen = () => { const mo = ent(), o = objekt(K.kb.sel), da = new Set(); if (K.kb.sel[0] === "p") for (const x of E.produktMerkmale(mo, o)) for (const w of x.werte) if (w.code) da.add(norm(w.code)); uebernehmen(treffer(mo, K.kb.poolSuche).map(a => a.code).filter(c => !da.has(norm(c)))); };
+  A.kbAlsFz = (el, e) => { e?.stopPropagation?.(); const g = objekt(K.kb.sel); if (!g) return; const r = fahrzeugeAnlegen(g.id, [el.dataset.c]); K.kb.poolSuche = ""; geaendert(`${el.dataset.c} als Fahrzeug in ${g.name}`); K.toast(r.neu ? `${el.dataset.c} als Fahrzeug angelegt` : r.verschoben ? `${el.dataset.c} hierher verschoben` : `${el.dataset.c} ist schon ein Fahrzeug`); sucheFokus(); };
+  A.kbAcZeile = (el, e) => { if (e?.target?.closest?.("button")) return; K.kb.acIdx = +el.dataset.i; K.render(); sucheFokus(); };
+  document.addEventListener("keydown", e => {
+    const f = e.target; if (!f || f.id !== "kb-psuche" || !K.root || !K.root.contains(f)) return;
+    const n = K.root.querySelectorAll(".kb-ac-liste [role=option]").length, kb = K.kb;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { if (!n) return; e.preventDefault(); kb.acIdx = ((kb.acIdx || 0) + (e.key === "ArrowDown" ? 1 : -1) + n) % n; K.render(); sucheFokus(); }
+    else if (e.key === "Enter") { e.preventDefault(); const li = K.root.querySelector(`#kb-ac-${kb.acIdx || 0}`), b = li?.querySelector("[data-act=kbUebernehmen]"); if (b) uebernehmen([b.dataset.c]); else if (li) K.toast(objekt(kb.sel) ? "Dieser Code ist schon drin." : "Links ein Fahrzeug oder eine Familie wählen."); }
+    else if (e.key === "Escape" && kb.poolSuche) { e.preventDefault(); kb.poolSuche = ""; kb.acIdx = 0; K.render(); sucheFokus(); }
+  });
   A.kbPoolWahl = el => { const s = K.kb.poolWahl; el.checked ? s.add(el.dataset.c) : s.delete(el.dataset.c); K.render(); };
   A.kbPoolLeer = () => { K.kb.poolWahl.clear(); K.render(); };
   A.kbPoolAlle = () => { K.root.querySelectorAll(".kb-poolliste input[data-c]").forEach(i => K.kb.poolWahl.add(i.dataset.c)); K.render(); };

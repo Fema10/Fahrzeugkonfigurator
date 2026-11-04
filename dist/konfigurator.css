@@ -1067,3 +1067,20 @@
 .apx-fz input:not([type=checkbox]){width:100%;min-width:9ch}
 .apx-kl{display:flex;gap:4px;align-items:center}
 .apx-frage{display:inline-flex;gap:4px}
+/* Katalog aufbauen: Artikelsuche mit Vorschlägen */
+#konfigurator .kb-pooltitel{font-size:14px;margin:2px 0 8px}
+#konfigurator .kb-ac{position:relative}
+#konfigurator .kb-ac input[type=search]{width:100%}
+#konfigurator .kb-ac-liste{list-style:none;margin:4px 0 0;padding:4px;border:1px solid var(--line);border-radius:8px;background:var(--surface);box-shadow:0 8px 24px rgba(20,24,32,.12);max-height:min(60vh,520px);overflow:auto;display:flex;flex-direction:column;gap:2px}
+#konfigurator .kb-ac-liste li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;align-items:center;padding:6px 8px;border-radius:6px;cursor:grab;font-size:12.5px}
+#konfigurator .kb-ac-liste li:hover{background:var(--surface-2,#F4F5F7)}
+#konfigurator .kb-ac-liste li[aria-selected=true]{background:#FFF6D6;outline:1px solid var(--accent)}
+#konfigurator .kb-ac-liste li.da{opacity:.55}
+#konfigurator .kb-ac-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#konfigurator .kb-ac-text code{font-size:11px;font-weight:700}
+#konfigurator .kb-ac-info{display:flex;gap:6px;align-items:center;justify-self:end}
+#konfigurator .kb-ac-knopf{grid-column:1 / -1;display:flex;gap:6px;justify-content:flex-end}
+#konfigurator .kb-ac-liste li:not([aria-selected=true]):not(:hover) .kb-ac-knopf{display:none}
+@media (hover:none){#konfigurator .kb-ac-liste li .kb-ac-knopf{display:flex!important}}
+#konfigurator .kb-ac-leer{margin:6px 2px;color:var(--muted)}
+#konfigurator .kb-pool kbd{font:600 10.5px var(--f-mono);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px;background:var(--surface)}
