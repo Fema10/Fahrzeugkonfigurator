@@ -4072,6 +4072,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
       if (this.modus !== "lokal") return;
       clearTimeout(this._lokalTimer);
       this._lokalTimer = setTimeout(() => this._lokalSchreiben(), 400);
+      if (!this._beimVerlassen) { this._beimVerlassen = true; window.addEventListener("pagehide", () => { if (this._lokalTimer) this._lokalSchreiben(); }); }
     },
     _lokalSchreiben() {
       clearTimeout(this._lokalTimer); this._lokalTimer = null; const S = this.S;
