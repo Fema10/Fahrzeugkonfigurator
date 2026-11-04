@@ -951,6 +951,6 @@
   });
   K.act.protBereich = el => { K.prot.bereich = el.dataset.b; K.render(); };
   K.act.zuModell = el => { K.st.knoten = el.dataset.k; K.st.modellTab = "merkmale"; K.gehe("studio-modell"); };
-  K.studio = { kontext, regelListe, matrixAnsicht, tabellenAnsicht, graph, stlTabelle, chipWahl, geaendert, bildFeld, bildHochladen, artKlasse, artTitel, gruppenOptionen, keinEntwurf, kopf, ro, dis, merkmalOptionen, gleicherScope,
+  K.studio = { kontext, regelKarte, regelListe, matrixAnsicht, tabellenAnsicht, graph, stlTabelle, chipWahl, geaendert, bildFeld, bildHochladen, artKlasse, artTitel, gruppenOptionen, keinEntwurf, kopf, ro, dis, merkmalOptionen, gleicherScope,
     knotenObjekt: (mo, k) => !k ? null : k.startsWith("g:") ? mo.gruppen.find(g => g.id === k.slice(2)) : k.startsWith("p:") ? E.produkt(mo, k.slice(2)) : null };
 })();

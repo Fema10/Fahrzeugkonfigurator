@@ -1109,3 +1109,15 @@
 #konfigurator .konf-leer{padding:40px 24px}
 #konfigurator .kb-preis-fehlt{font-size:13px;font-weight:500;opacity:.75}
 #konfigurator .kachel-knoepfe{gap:4px}
+/* Baum: Positionen unter dem Fahrzeug */
+#konfigurator .kb-posliste{list-style:none;margin:0;padding:0}
+#konfigurator .kb-zeile.pos{cursor:pointer}
+#konfigurator .kb-zeile.pos .kb-artname{font-size:12.5px}
+#konfigurator .kb-zeile.ueber{cursor:default;padding-top:6px}
+#konfigurator .kb-ueber{font:700 10.5px var(--f-mono,monospace);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+#konfigurator .kb-typ{font-size:12px;color:var(--muted);width:14px;text-align:center}
+#konfigurator .kb-rz{font-style:normal;margin-left:4px;color:var(--accent-ink,#8a6a00);background:#FFF3C4;border-radius:6px;padding:0 4px}
+#konfigurator .kb-postitel{margin:0;font-size:20px}
+#konfigurator .kb-postitel code{font-size:13px;color:var(--muted)}
+#konfigurator .kb-posregeln{margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
+#konfigurator .kb-posfelder{margin:8px 0 14px}

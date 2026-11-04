@@ -198,6 +198,11 @@
   });
   function objekt(sel) { if (!sel) return null; const id = sel.slice(2); return sel[0] === "g" ? gruppe(id) : E.produkt(ent(), id); }
 
+  /** Regeln, die bei diesem Fahrzeug gelten und die Position (Gruppe) betreffen */
+  const regelnZu = (mo, p, mid) => mo.regeln.filter(r => E.imGeltungsbereich(mo, r, p) && (r.typ === "tabelle" ? (r.tabelle?.merkmale || []).includes(mid) : (r.wenn || []).some(c => c.merkmal === mid) || r.dann?.merkmal === mid));
+  const typName = m => (E.GRUPPENTYPEN.find(([k]) => k === E.gruppentyp(m)) || [, "Auswahl"])[1];
+  const typKurz = m => ({ kacheln: "Kacheln", liste: "Liste", dropdown: "Dropdown", mehrfach: "mehrere" })[E.gruppentyp(m)] || "Auswahl";
+  const typIkon = m => ({ kacheln: "▦", liste: "☰", dropdown: "▾", mehrfach: "☑" })[E.gruppentyp(m)] || "•";
   function baumAnsicht(mo) {
     const kb = K.kb;
     const famZeile = (g, t) => {
@@ -208,8 +213,14 @@
           ${ro() ? "" : `<button type="button" class="kb-plus" data-act="kbFamNeu" data-g="${g.id}" title="Unterfamilie anlegen" aria-label="Unterfamilie anlegen">+</button>`}</div>
         ${offen ? `<ul>${ks.map(k => famZeile(k, t + 1)).join("")}${fs.map(p => artZeile(p, t + 1)).join("")}</ul>` : ""}</li>`;
     };
-    const artZeile = (p, t) => `<li><div class="kb-zeile art${kb.sel === "p:" + p.id ? " aktiv" : ""}${p.aktiv === false ? " inaktiv" : ""}" style="--t:${t}" draggable="${!ro()}" data-drag="p:${p.id}" data-drop="p:${p.id}">
-        <span class="kb-auf"></span><button type="button" class="kb-nm" data-act="kbWahl" data-s="p:${p.id}"><span class="kb-ik">▢</span><span class="kb-artname">${esc(p.name)}<code>${esc(p.code || "")}</code></span></button><span class="kb-zahl" title="Vertriebscodes">${codesVon(p)}</span></div></li>`;
+    const artZeile = (p, t) => {
+      const pm = E.produktMerkmale(mo, p), offen = kb.offen["p:" + p.id] ?? (kb.sel === "p:" + p.id), abs = [...new Set(pm.map(x => x.m.abschnitt || ""))];
+      const posZeile = (x, tt) => { const n = regelnZu(mo, p, x.m.id).length;
+        return `<li><div class="kb-zeile pos${kb.sel === "p:" + p.id && kb.pos === x.m.id ? " aktiv" : ""}" style="--t:${tt}" data-drop="m:${x.m.id}"><span class="kb-auf"></span><button type="button" class="kb-nm" data-act="kbWahl" data-s="p:${p.id}" data-pos="${x.m.id}" title="${esc(x.m.name)}: ${esc(typName(x.m))}"><span class="kb-ik kb-typ" aria-hidden="true">${typIkon(x.m)}</span><span class="kb-artname">${esc(x.m.name)}<code>${esc(x.m.code || "")}${x.m.code ? " · " : ""}${esc(typKurz(x.m))}</code></span></button><span class="kb-zahl" title="Codes${n ? ", " + n + " Regeln" : ""}">${x.werte.length}${n ? `<i class="kb-rz" title="${n} Regeln">§${n}</i>` : ""}</span></div></li>`; };
+      return `<li><div class="kb-zeile art${kb.sel === "p:" + p.id && !kb.pos ? " aktiv" : ""}${p.aktiv === false ? " inaktiv" : ""}" style="--t:${t}" draggable="${!ro()}" data-drag="p:${p.id}" data-drop="p:${p.id}">
+        <button type="button" class="kb-auf" data-act="kbAufP" data-p="${p.id}" aria-label="${offen ? "Positionen zuklappen" : "Positionen aufklappen"}">${pm.length ? (offen ? "▾" : "▸") : ""}</button><button type="button" class="kb-nm" data-act="kbWahl" data-s="p:${p.id}"><span class="kb-ik">▢</span><span class="kb-artname">${esc(p.name)}<code>${esc(p.code || "")}</code></span></button><span class="kb-zahl" title="Vertriebscodes">${codesVon(p)}</span></div>
+        ${offen && pm.length ? `<ul class="kb-posliste">${abs.map(ab => `${ab || abs.length > 1 ? `<li><div class="kb-zeile ueber" style="--t:${t + 1}"><span class="kb-auf"></span><span class="kb-ueber">${esc(ab || "Ohne Überschrift")}</span></div></li>` : ""}${pm.filter(x => (x.m.abschnitt || "") === ab).map(x => posZeile(x, t + (ab || abs.length > 1 ? 2 : 1))).join("")}`).join("")}</ul>` : ""}</li>`;
+    };
     const ohne = mo.produkte.filter(p => !p.gruppe || !gruppe(p.gruppe));
     return `<nav class="panel kb-baum" aria-label="Katalog">
       <div class="kb-baumkopf"><b>Katalog</b>${ro() ? "" : `<button class="btn klein" type="button" data-act="kbFamNeu" data-g="">+ Familie</button>`}</div>
@@ -258,6 +269,24 @@
         ${gs.length ? `<div class="kb-gruppe fest"><div class="kb-gkopf"><b>Grundausstattung</b><span class="gedimmt klein">fest enthalten, keine Auswahl</span></div><div class="kb-chips">${gs.map(({ g, i }) => `<span class="kb-chip std"><code>${esc(g.code)}</code><span class="kb-cn">${esc(g.name)}</span>${ro() ? "" : `<button type="button" data-act="kbGaWeg" data-i="${i}" title="Entfernen" aria-label="Entfernen">✕</button>`}</span>`).join("")}</div></div>` : ""}
         ${ms.map(karte).join("")}</section>`; }).join("");
   }
+  /** Eine Position (Gruppe) eines Fahrzeugs: Art der Auswahl, Codes mit Feldtyp, Regeln */
+  function position(mo, p, x, karte) {
+    const rs = regelnZu(mo, p, x.m.id), m = x.m; K.st.kontext = "p:" + p.id;
+    const andere = mo.produkte.filter(q => q !== p && E.produktMerkmale(mo, q).some(y => y.m.id === m.id));
+    return `<div class="panel kb-objekt kb-position" data-drop="m:${m.id}">
+      <div class="eyebrow">${E.gruppenPfad(mo, p.gruppe).map(g => esc(g.name)).join(" › ")} › <button type="button" class="link" data-act="kbPosZurueck">${esc(p.name)}</button>${m.abschnitt ? ` › ${esc(m.abschnitt)}` : ""}</div>
+      <div class="kb-kopf"><h2 class="kb-postitel">${esc(m.name)}${m.code ? ` <code>${esc(m.code)}</code>` : ""}</h2><button type="button" class="btn klein" data-act="kbPosZurueck">← Alle Positionen</button></div>
+      <div class="formgitter kb-posfelder">
+        <div class="feld"><label for="kb-pos-typ">Wie wird ausgewählt?</label><select id="kb-pos-typ" data-act="kbMTyp" data-m="${m.id}" ${St().dis()}>${E.GRUPPENTYPEN.map(([k, n]) => `<option value="${k}" ${E.gruppentyp(m) === k ? "selected" : ""}>${n}</option>`).join("")}</select><span class="klein gedimmt">${({ kacheln: "genau einen Code wählen, als Kacheln mit Bild", liste: "genau einen Code wählen, als Liste", dropdown: "genau einen Code wählen, als Auswahlfeld", mehrfach: "beliebig viele Codes ankreuzen" })[E.gruppentyp(m)] || ""}. Einzelne Codes können darunter einen eigenen Feldtyp haben (Ja/Nein, Zahl, Freitext, fest).</span></div>
+        ${m.typ !== "mehrfach" && E.wahlWerte(m, x.werte).length ? `<div class="feld"><label class="haken"><input type="checkbox" data-act="kbMPflicht" data-m="${m.id}" ${m.pflicht ? "checked" : ""} ${St().dis()}> Pflicht, ohne Vorauswahl</label><span class="klein gedimmt">Der Vertrieb muss selbst wählen.</span></div>` : ""}
+      </div>
+      ${andere.length ? `<p class="hinweis klein">Diese Position gibt es auch bei ${andere.length} weiteren Fahrzeug${andere.length === 1 ? "" : "en"} (${andere.slice(0, 3).map(q => esc(q.name)).join(", ")}${andere.length > 3 ? " …" : ""}). Name, Auswahlart und Feldtypen gelten dort ebenfalls.</p>` : ""}
+      <h3>Codes</h3>${karte(x)}
+      <section class="kb-posregeln"><div class="panelkopf"><h3>Regeln <span class="gedimmt">${rs.length}</span></h3>${ro() ? "" : `<span class="row"><button class="btn klein primary" type="button" data-act="kbRegelNeu" data-m="${m.id}" data-rolle="dann" title="Wenn etwas anderes gewählt ist, wird diese Position eingeschränkt">+ Regel: schränkt „${esc(m.name)}“ ein</button><button class="btn klein" type="button" data-act="kbRegelNeu" data-m="${m.id}" data-rolle="wenn" title="Die Auswahl hier schränkt andere Positionen ein">+ Regel: „${esc(m.name)}“ schränkt ein</button></span>`}</div>
+        ${rs.length ? `<div class="regelkarten">${rs.map(r => r.typ === "tabelle" ? `<div class="regelkarte"><div class="regelkopf"><b>${esc(r.id)}</b> Kombinationstabelle ${esc(r.name || "")} <a class="link" href="#studio-regeln" data-act="kbZuRegeln" data-p="${p.id}">in Regeln bearbeiten</a></div></div>` : K.studio.regelKarte(mo, r)).join("")}</div>` : `<p class="klein gedimmt">Noch keine Regeln für diese Position bei ${esc(p.name)}. Regeln sperren Codes, erlauben nur bestimmte oder wählen automatisch, abhängig von der Auswahl in anderen Positionen.</p>`}
+        <p class="klein gedimmt">Neue Regeln gelten für ${esc(p.name)}. Im Regel-Editor unter „Gilt für“ auf die ganze Familie erweiterbar.</p></section>
+    </div>`;
+  }
   function fahrzeug(mo, p) {
     const kb = K.kb, pm = E.produktMerkmale(mo, p), q = kb.codeSuche.toLowerCase(), a = K.Store.artikelZu(p.code);
     const passt = w => !q || (w.code + " " + w.name).toLowerCase().includes(q);
@@ -280,6 +309,9 @@
             ${ro() ? "" : `<button type="button" class="kb-x" data-act="kbWWeg" data-m="${x.m.id}" data-w="${w.id}" title="Vom Fahrzeug entfernen" aria-label="Entfernen">✕</button>`}
             ${K.wertExtras(x.m, w, "kb")}</div>`; }).join("")}</div></article>`;
     };
+    const posX = kb.pos && pm.find(x => x.m.id === kb.pos);
+    if (kb.pos && !posX) kb.pos = null;
+    if (posX) return position(mo, p, posX, karte);
     return `<div class="panel kb-objekt" data-drop="p:${p.id}">
       <div class="eyebrow">${E.gruppenPfad(mo, p.gruppe).map(x => esc(x.name)).join(" › ") || "Ohne Familie"} ›</div>
       <div class="kb-kopf"><input id="kb-pname" class="flach titelfeld" data-chg="kbPFeld" data-k="name" value="${esc(p.name)}" aria-label="Name" ${St().dis()}>
@@ -346,7 +378,16 @@
 
   /* ---------- Aktionen ---------- */
   const A = K.act, I = K.inp;
-  A.kbWahl = el => { K.kb.sel = el.dataset.s; K.kb.loeschen = null; K.kb.codeSuche = ""; K.render(); };
+  A.kbWahl = el => { const kb = K.kb; kb.sel = el.dataset.s; kb.pos = el.dataset.pos || null; kb.ziel = kb.pos || ""; kb.loeschen = null; kb.codeSuche = ""; if (kb.pos) kb.offen[kb.sel] = true; K.render(); K.nach(v => v.querySelector(".kb-mitte")?.scrollIntoView({ block: "nearest" })); };
+  A.kbZuRegeln = el => { K.st.kontext = "p:" + el.dataset.p; K.st.regelTab = "tabellen"; K.gehe("studio-regeln"); };
+  A.kbAufP = el => { const k = "p:" + el.dataset.p, kb = K.kb; kb.offen[k] = !(kb.offen[k] ?? (kb.sel === k)); K.render(); };
+  A.kbPosZurueck = () => { K.kb.pos = null; K.kb.ziel = ""; K.render(); };
+  A.kbRegelNeu = el => {
+    const mo = ent(), pid = K.kb.sel.slice(2), mid = el.dataset.m, id = E.neueId("R", mo.regeln.map(r => r.id)), alsDann = el.dataset.rolle !== "wenn";
+    mo.regeln.push({ id, name: "", aktiv: true, produkte: [pid], gruppen: [], wenn: [{ merkmal: alsDann ? "" : mid, op: "ist", werte: [] }], dann: { typ: "sperren", merkmal: alsDann ? mid : "", werte: [] }, hinweis: "" });
+    K.st.kontext = "p:" + pid; K.st.regelOffen = id; geaendert(`Regel ${id} für ${E.merkmal(mo, mid)?.name} angelegt`);
+    K.nach(v => v.querySelector(".kb-posregeln .regelkarte.offen")?.scrollIntoView({ block: "center" }));
+  };
   A.kbAuf = el => { K.kb.offen[el.dataset.g] = !(K.kb.offen[el.dataset.g] ?? true); K.render(); };
   A.kbFamNeu = el => {
     const mo = ent(), eltern = el.dataset.g || null, g = { id: eindeutig("familie", mo.gruppen), name: "Neue Familie", eltern, merkmale: [] };
