@@ -194,7 +194,7 @@
             <td><span class="apx-kl"><input id="apx-k-${p.id}" class="mono kurz" data-chg="apxKlasse" data-p="${p.id}" value="${esc(AP.klasseVon(p, opts))}" maxlength="12" aria-label="Attributklasse" ${dis}>${eigen && !ro() ? `<button type="button" class="btn klein ghost" data-act="apxKlasseZurueck" data-p="${p.id}" title="Wieder aus der Artikelnummer bilden" aria-label="Attributklasse zurücksetzen">↺</button>` : ""}</span></td>
             <td class="r num">${E.produktMerkmale(mo, p).reduce((n, x) => n + x.werte.length, 0)}</td>
             <td class="r">${ro() ? "" : frage ? `<span class="apx-frage"><button type="button" class="btn klein gefahr" data-act="apxLoeschenOk" data-p="${p.id}">Löschen</button><button type="button" class="btn klein ghost" data-act="apxLoeschen" data-p="">Abbrechen</button></span>` : `<button type="button" class="btn klein gefahr-text" data-act="apxLoeschen" data-p="${p.id}" aria-label="${esc(p.name)} löschen">Löschen</button>`}</td></tr>`; }).join("") || `<tr><td colspan="6" class="gedimmt">Noch keine Fahrzeuge mit Codes. Erst im Katalogaufbau anlegen.</td></tr>`}</tbody></table>
-          ${K.apx.loeschen ? `<p class="klein gefahr-text">Das Fahrzeug wird aus dem Entwurf gelöscht (mit seinen Codes-Zuordnungen und Regel-Geltungen). Bis zur nächsten Freigabe bleibt die freigegebene Version unverändert.</p>` : ""}
+          ${K.apx.loeschen ? `<p class="klein gefahr-text">Das Fahrzeug wird aus Katalog aufbauen und aus dem Katalog gelöscht. Zurückholen über Studio › Protokoll.</p>` : ""}
           <p class="klein gedimmt">Attributklasse höchstens 12 Zeichen. Attributgruppen heißen Klasse-ZZ-Code (max. 15 Zeichen).</p></section>
         <section class="panel"><h3>Einstellungen</h3><div class="formgitter">
           <div class="feld"><label for="apx-m">Mandant</label><input id="apx-m" class="mono kurz" data-chg="apxOpt" data-k="mandant" value="${esc(opts.mandant)}" placeholder="leer" ${dis}></div>
@@ -228,9 +228,9 @@
   K.act.apxLoeschen = el => { K.apx.loeschen = el.dataset.p || null; K.render(); };
   K.act.apxLoeschenOk = el => {
     const mo = S().entwurf, p = fzg(el.dataset.p); if (!p) return; K.apx.loeschen = null;
-    E.ausGeltungEntfernen(mo, [], [p.id]); mo.produkte = mo.produkte.filter(x => x !== p); K.apx.auswahl.delete(p.id);
+    K.apx.auswahl.delete(p.id); K.Store.endgueltigLoeschen({ produkte: [p.id] }, `Fahrzeug ${p.name} (${p.code || p.id}) gelöscht`).then(() => K.render());
     const o = AP.standardOpts(); if ((o.klassen || {})[p.id]) { const k = Object.assign({}, o.klassen); delete k[p.id]; optSetzen("klassen", k); }
-    aenderung(`Fahrzeug ${p.name} gelöscht`); K.toast(`${p.name} gelöscht`); K.render();
+    K.toast(`${p.name} gelöscht. Zurückholen über Studio › Protokoll.`);
   };
   K.act.apxTab = el => { K.apx.tab = el.dataset.t; K.render(); };
   K.act.apxLaden = async el => {

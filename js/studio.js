@@ -114,8 +114,8 @@
     K.st.produkt = id; geaendert(`Produkt ${id} angelegt`);
   };
   K.act.pKopie = () => { const mo = ent(), p = K.clone(prod()); p.id = E.neueId("P", mo.produkte.map(x => x.id)); p.name += " (Kopie)"; p.aktiv = false; mo.produkte.push(p); K.st.produkt = p.id; geaendert(`Produkt ${p.name} angelegt`); };
-  K.act.pLoeschen = () => K.sheet(`<h3>${esc(prod().name)} löschen?</h3><p>Der Artikel wird aus dem Konfigurationsmodell entfernt (nicht aus APplus). Er verschwindet nach der nächsten Freigabe aus dem Katalog; bestehende Angebote behalten ihre Positionen. Regeln, die nur für diesen Artikel galten, werden mit gelöscht.</p><div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-act="sheetZu">Abbrechen</button><button class="btn gefahr" type="button" data-act="pLoeschenOk">Löschen</button></div>`);
-  K.act.pLoeschenOk = () => { const p = prod(), mo = ent(); mo.produkte = mo.produkte.filter(x => x.id !== p.id); const n = E.ausGeltungEntfernen(mo, [], [p.id]); K.sheetZu(); K.st.produkt = null; if (K.st.knoten === "p:" + p.id) K.st.knoten = p.gruppe ? "g:" + p.gruppe : ""; geaendert(`Artikel ${p.code || p.name} gelöscht${n ? `, ${n} Regeln nur für diesen Artikel entfernt` : ""}`); };
+  K.act.pLoeschen = () => K.sheet(`<h3>${esc(prod().name)} löschen?</h3><p>Das Fahrzeug wird aus dem Konfigurator und dem Katalog entfernt (nicht aus APplus). Bestehende Angebote behalten ihre Positionen. Regeln, die nur dafür galten, werden mit gelöscht. Zurückholen über Studio › Protokoll.</p><div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-act="sheetZu">Abbrechen</button><button class="btn gefahr" type="button" data-act="pLoeschenOk">Löschen</button></div>`);
+  K.act.pLoeschenOk = async () => { const p = prod(); K.sheetZu(); await K.Store.endgueltigLoeschen({ produkte: [p.id] }, `Fahrzeug ${p.name} (${p.code || p.id}) gelöscht`); K.st.produkt = ent().produkte[0]?.id || null; K.toast(`${p.name} gelöscht. Zurückholen über Studio › Protokoll.`); K.render(); };
   K.act.stTesten = el => K.konfigOeffnen(el.dataset.p, null, null, true);
   K.act.glbHochladen = async el => {
     const f = el.files[0]; if (!f) return;
@@ -846,6 +846,7 @@
     return kopf("Einstellungen", "") + `
       <section class="panel"><h3>Firma</h3><div class="formgitter">${f("firma", "name", "Firmenname")}${f("firma", "strasse", "Straße")}${f("firma", "ort", "PLZ und Ort")}${f("firma", "tel", "Telefon")}${f("firma", "web", "Website")}${f("firma", "ustid", "USt-IdNr.")}</div></section>
       <section class="panel"><h3>Angebote</h3><div class="formgitter">${f("root", "gueltigTage", "Gültigkeit in Tagen", "number")}${f("root", "mwst", "Umsatzsteuer %", "number")}</div></section>
+      ${abfragenPanel(e)}
       ${nummernPanel(e, f)}
       <section class="panel"><div class="panelkopf"><h3>Vertrieb</h3>${ro() ? "" : `<button class="btn klein" type="button" data-act="vtNeu">+ Person</button>`}</div>
         <div class="tabwrap ohne-rand"><table class="kompakt"><thead><tr><th>Name</th><th>Telefon</th><th>E-Mail</th><th></th></tr></thead><tbody>
@@ -858,6 +859,50 @@
         <p class="klein gedimmt">Für den Betrieb in APplus wird die Datenschicht (store.js) gegen Ihre Queries und Tabellen getauscht. Die Struktur steht in daten/demo.json.</p></section>`;
   });
   /* Angebotsnummern: eigener Nummernkreis oder aus APplus */
+  const ABFRAGEN = [["artikel", "Artikelstamm (Codes)", "ARTIKEL, NAME; optional NETTO bzw. VKPREIS, HERSTELLKOSTEN, ME"], ["kunden", "Kunden", "KUNDENNR, FIRMA, STRASSE, PLZ, ORT …"], ["vertrieb", "Vertrieb (Bearbeiter)", "PERSONAL, NAME, TELEFON, EMAIL"]];
+  function abfragenPanel(e) {
+    const qs = K.Store.abfragen(), st = K.Store.abfrageStatus || {}, cfg = (K.cfg && K.cfg.queries) || {};
+    return `<section class="panel"><h3>APplus-Abfragen</h3><p class="klein gedimmt">Name der Abfrage, die dem Dashboard zugeordnet ist (wie in APplus angelegt). Der Eintrag hier gilt für diesen Browser und hat Vorrang vor <code>KONF_CONFIG</code>.</p>
+      <div class="tabwrap ohne-rand"><table class="kompakt abf-tab"><thead><tr><th>Wofür</th><th>Abfrage</th><th>Stand</th><th></th></tr></thead><tbody>
+      ${ABFRAGEN.map(([k, t, sp]) => { const s0 = st[k]; return `<tr><td>${t}<div class="klein gedimmt">${sp}</div></td>
+        <td><input id="abf-${k}" class="mono" data-chg="abfName" data-k="${k}" value="${esc((e.abfragen || {})[k] ?? cfg[k] ?? "")}" placeholder="z. B. apx_Artikeldaten" aria-label="Abfrage für ${t}" ${dis()}></td>
+        <td class="klein" id="abf-st-${k}">${s0 ? s0.fehler ? `<span class="warntext">${esc(s0.fehler)}</span>` : `<span class="ok-text">${K.zahl(s0.zeilen)} Zeilen geladen</span>` : qs[k] ? "noch nicht geladen" : "–"}</td>
+        <td><button class="btn klein" type="button" data-act="abfTest" data-k="${k}" ${qs[k] ? "" : "disabled"}>Testen</button></td></tr>`; }).join("")}</tbody></table></div>
+      <div class="feld abf-basis"><label for="abf-basis">Adresse vor dem Bildpfad</label><input id="abf-basis" class="mono" data-chg="abfBasis" value="${esc(e.bildBasis || "")}" placeholder="${esc(K.Store.bildBasisStandard() || "z. B. /APplusProd/DocLib/")} (Standard)" ${dis()}><span class="klein gedimmt">Wird vor relative Bildpfade aus der Abfrage gesetzt (z. B. <code>AB0/AB030.png</code>). Leer = Dokumentablage von APplus (<code>&lt;App&gt;/DocLib/</code>).</span></div>
+      <div id="abf-test" class="klein" aria-live="polite"></div>${(K.nach(testZeigen), "")}
+      <div class="row"><button class="btn" type="button" data-act="lokalNeu">Daten aus APplus neu laden</button></div></section>`;
+  }
+  K.inp.abfName = async el => { const e = S().einst; e.abfragen = Object.assign({}, e.abfragen || {}, { [el.dataset.k]: el.value.trim() }); await K.Store.einstSpeichern(e, true); K.Store.log("Einstellungen", `Abfrage ${el.dataset.k}: ${el.value.trim() || "–"}`); K.render(); };
+  /** Erstes Bild der Artikel-Abfrage probeweise laden und das Ergebnis zeigen */
+  function bildPruefen(rows) {
+    const ziel = K.el("abf-bild"); if (!ziel) return;
+    const sp = ((K.cfg.artikelSpalten || {}).bild || ["BILD", "DOCUMENTS"]).map(x => x.toUpperCase());
+    let roh = "", spalte = "";
+    for (const r of rows) { for (const [h, v] of Object.entries(r || {})) if (sp.includes(h.toUpperCase()) && String(v || "").trim()) { roh = String(v); spalte = h; break; } if (roh) break; }
+    if (!roh) { ziel.innerHTML = `<span class="gedimmt">Keine Bildspalte mit Inhalt gefunden (erkannt werden ${sp.join(", ")}).</span>`; return; }
+    const url = K.Store.bildAus ? K.Store.bildAus(roh) : roh; let voll = url; try { voll = new URL(url, location.href).href; } catch (e) {}
+    ziel.innerHTML = `Bild aus <code>${esc(spalte)}</code>: <code>${esc(roh)}</code><br>Aufgerufene Adresse: <code>${esc(voll)}</code><br><span id="abf-bild-st">lade …</span>`;
+    const img = new Image(), st = () => K.el("abf-bild-st");
+    img.onload = () => { if (st()) st().innerHTML = `<span class="ok-text">Bild lädt (${img.naturalWidth} × ${img.naturalHeight} px).</span>`; };
+    img.onerror = () => { if (st()) st().innerHTML = `<span class="warntext">Bild lädt nicht.</span> ${/^(\\\\|[a-z]:[\\/])/i.test(roh) ? "Netzwerk- und Laufwerkspfade kann der Browser nicht öffnen. Die Abfrage muss eine Web-Adresse liefern." : "Unter dieser Adresse liefert der Server kein Bild. Bitte die Adresse im Browser aufrufen und prüfen."}`; };
+    img.src = url;
+  }
+  K.inp.abfBasis = async el => { const e = S().einst; e.bildBasis = el.value.trim(); await K.Store.einstSpeichern(e, true); K.Store.log("Einstellungen", `Bildadresse: ${e.bildBasis || "–"}`); K.Store.bilderNeu(); K.render(); };
+  function testZeigen() {
+    const t = K.el("abf-test"), r = K.abfLetzt; if (!t || !r) return;
+    if (r.fehler) { t.innerHTML = `<span class="warntext">${esc(r.name)}: ${esc(r.fehler)}</span>`; return; }
+    const rows = r.rows, kopf = [...new Set(rows.slice(0, 50).flatMap(x => Object.keys(x || {})))];
+    t.innerHTML = `<b>${esc(r.name)}</b>: ${K.zahl(rows.length)} Zeilen · Spalten ${kopf.map(h => `<code>${esc(h)}</code>`).join(", ") || "–"}${rows[0] ? `<br>Beispiel: ${esc(kopf.map(h => rows[0][h]).join(" · "))}` : ""}${r.k === "artikel" && !kopf.some(h => h.toUpperCase() === "ARTIKEL") ? `<br><span class="warntext">Spalte ARTIKEL fehlt.</span>` : ""}<br>Mit „Daten aus APplus neu laden“ übernehmen.<div id="abf-bild"></div>`;
+    if (r.k === "artikel") bildPruefen(rows);
+  }
+  K.act.abfTest = async el => {
+    const k = el.dataset.k, name = K.Store.abfragen()[k], t = K.el("abf-test"); t.textContent = `frage ${name} ab …`;
+    try {
+      const rows = await K.cfg.loadQuery(name, k);
+      if (!Array.isArray(rows)) { K.abfLetzt = { k, name, fehler: location.protocol === "file:" ? "Abfragen lassen sich nur innerhalb von APplus abrufen." : "Die Abfrage hat keine Daten geliefert." }; return testZeigen(); }
+      K.abfLetzt = { k, name, rows }; testZeigen();
+    } catch (err) { K.abfLetzt = { k, name, fehler: err.message || String(err) }; testZeigen(); }
+  };
   function nummernPanel(e, f) {
     const z = Object.assign({ quelle: "app", abfrage: (K.cfg.queries || {}).angebotsnummer || "", feld: "", art: "naechste", ersatz: false }, e.nummern || {}), ap = z.quelle === "applus";
     const inp = (k, t, ph, hint) => `<div class="feld"><label for="nr-${k}">${t}</label><input id="nr-${k}" class="mono" data-chg="nrFeld" data-k="${k}" value="${esc(z[k] || "")}" placeholder="${esc(ph || "")}" ${dis()}>${hint ? `<span class="klein gedimmt">${hint}</span>` : ""}</div>`;
@@ -902,10 +947,11 @@
     return kopf("Protokoll", "Wer hat wann was geändert. Die letzten drei Monate.") + `
       <div class="filterleiste"><div class="segment">${[["", "Alle"], ...bereiche.map(b => [b, b])].map(([id, n]) => `<button type="button" data-act="protBereich" data-b="${esc(id)}" aria-pressed="${K.prot.bereich === id}">${esc(n)}</button>`).join("")}</div></div>
       ${liste.length ? `<div class="tabwrap"><table><thead><tr><th>Zeit</th><th>Bereich</th><th>Änderung</th><th>Von</th></tr></thead><tbody>
-      ${liste.map(x => `<tr><td class="nowrap gedimmt">${K.zeit(x.ts)}</td><td><span class="chip">${esc(x.bereich)}</span></td><td>${esc(x.text)}</td><td class="gedimmt">${x.von ? esc(namen[x.von] || "Jemand") : "System"}</td></tr>`).join("")}</tbody></table></div>` : `<div class="leer">Noch keine Einträge.</div>`}`;
+      ${liste.map(x => `<tr><td class="nowrap gedimmt">${K.zeit(x.ts)}</td><td><span class="chip">${esc(x.bereich)}</span></td><td>${esc(x.text)}${x.daten && x.daten.art === "geloescht" ? (x.wiederhergestellt ? ` <span class="chip">zurückgeholt ${K.zeit(x.wiederhergestellt)}</span>` : ro() ? "" : ` <button type="button" class="btn klein" data-act="protZurueck" data-ts="${x.ts}" title="${esc([x.daten.produkte.length ? x.daten.produkte.length + " Fahrzeuge" : "", x.daten.gruppen.length ? x.daten.gruppen.length + " Familien" : "", x.daten.regeln.length ? x.daten.regeln.length + " Regeln" : ""].filter(Boolean).join(", "))}">Zurückholen</button>`) : ""}</td><td class="gedimmt">${x.von ? esc(namen[x.von] || "Jemand") : "System"}</td></tr>`).join("")}</tbody></table></div>` : `<div class="leer">Noch keine Einträge.</div>`}`;
   });
+  K.act.protZurueck = async el => { el.disabled = true; const n = await K.Store.wiederherstellen(+el.dataset.ts); K.toast(n ? `Zurückgeholt: im Katalog aufbauen und im Katalog wieder vorhanden` : "Nichts zurückzuholen"); K.render(); };
   K.act.protBereich = el => { K.prot.bereich = el.dataset.b; K.render(); };
   K.act.zuModell = el => { K.st.knoten = el.dataset.k; K.st.modellTab = "merkmale"; K.gehe("studio-modell"); };
-  K.studio = { kontext, regelListe, matrixAnsicht, tabellenAnsicht, graph, stlTabelle, chipWahl, geaendert, bildFeld, bildHochladen, artKlasse, artTitel, gruppenOptionen, keinEntwurf, kopf, ro, dis, merkmalOptionen, gleicherScope,
+  K.studio = { kontext, regelKarte, regelListe, matrixAnsicht, tabellenAnsicht, graph, stlTabelle, chipWahl, geaendert, bildFeld, bildHochladen, artKlasse, artTitel, gruppenOptionen, keinEntwurf, kopf, ro, dis, merkmalOptionen, gleicherScope,
     knotenObjekt: (mo, k) => !k ? null : k.startsWith("g:") ? mo.gruppen.find(g => g.id === k.slice(2)) : k.startsWith("p:") ? E.produkt(mo, k.slice(2)) : null };
 })();

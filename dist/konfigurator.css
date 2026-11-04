@@ -1067,3 +1067,62 @@
 .apx-fz input:not([type=checkbox]){width:100%;min-width:9ch}
 .apx-kl{display:flex;gap:4px;align-items:center}
 .apx-frage{display:inline-flex;gap:4px}
+/* Katalog aufbauen: Artikelsuche mit Vorschlägen */
+#konfigurator .kb-pooltitel{font-size:14px;margin:2px 0 8px}
+#konfigurator .kb-ac{position:relative}
+#konfigurator .kb-ac input[type=search]{width:100%}
+#konfigurator .kb-ac-liste{list-style:none;margin:4px 0 0;padding:4px;border:1px solid var(--line);border-radius:8px;background:var(--surface);box-shadow:0 8px 24px rgba(20,24,32,.12);max-height:min(60vh,520px);overflow:auto;display:flex;flex-direction:column;gap:2px}
+#konfigurator .kb-ac-liste li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;align-items:center;padding:6px 8px;border-radius:6px;cursor:grab;font-size:12.5px}
+#konfigurator .kb-ac-liste li:hover{background:var(--surface-2,#F4F5F7)}
+#konfigurator .kb-ac-liste li[aria-selected=true]{background:#FFF6D6;outline:1px solid var(--accent)}
+#konfigurator .kb-ac-liste li.da{opacity:.55}
+#konfigurator .kb-ac-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#konfigurator .kb-ac-text code{font-size:11px;font-weight:700}
+#konfigurator .kb-ac-info{display:flex;gap:6px;align-items:center;justify-self:end}
+#konfigurator .kb-ac-knopf{grid-column:1 / -1;display:flex;gap:6px;justify-content:flex-end}
+#konfigurator .kb-ac-liste li:not([aria-selected=true]):not(:hover) .kb-ac-knopf{display:none}
+@media (hover:none){#konfigurator .kb-ac-liste li .kb-ac-knopf{display:flex!important}}
+#konfigurator .kb-ac-leer{margin:6px 2px;color:var(--muted)}
+#konfigurator .kb-pool kbd{font:600 10.5px var(--f-mono);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px;background:var(--surface)}
+#konfigurator .kb-quelle{margin:8px 0 0}
+#konfigurator .kb-quelle.ok{color:var(--ok)}
+#konfigurator .abf-tab input{width:100%;min-width:14ch}
+#konfigurator .ok-text{color:var(--ok)}
+#konfigurator .kb-ac-bild{display:inline-flex;width:34px;height:26px;vertical-align:middle;margin-right:6px;border-radius:4px;overflow:hidden;background:var(--surface-2,#F4F5F7)}
+#konfigurator .kb-ac-bild img{width:100%;height:100%;object-fit:contain}
+#konfigurator .kb-silh img,#konfigurator .kachel-bild img{max-width:100%;max-height:100%;object-fit:contain}
+#konfigurator .kb-silh:has(img){height:90px;background:#fff}
+#konfigurator .bild-ersatz{display:contents}
+/* Fahrzeug-Kacheln im Katalogaufbau: Bearbeiten / Löschen */
+#konfigurator .kb-kachel-w{position:relative;display:flex}
+#konfigurator .kb-kachel-w>.kb-kachel{flex:1;min-width:0}
+#konfigurator .kb-kachel-akt{position:absolute;top:6px;right:6px;display:flex;gap:2px;opacity:0;transition:opacity .12s}
+#konfigurator .kb-kachel-w:hover .kb-kachel-akt,#konfigurator .kb-kachel-w:focus-within .kb-kachel-akt{opacity:1}
+@media (hover:none){#konfigurator .kb-kachel-akt{opacity:1}}
+#konfigurator .kb-kachel-akt .ikon{background:var(--surface);border:1px solid var(--line);border-radius:5px;width:28px;height:28px;display:grid;place-items:center;cursor:pointer;font-size:13px}
+#konfigurator .kb-kachel-frage{position:absolute;inset:auto 6px 6px 6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:var(--surface);border:1px solid var(--bad);border-radius:6px;padding:6px;font-size:12px}
+#konfigurator .kb-kachel-frage span{flex:1 0 100%;font-weight:600}
+/* Konfigurator: Foto statt 3D, Ersatz ohne 3D */
+#konfigurator .fotoplatz{display:grid;place-items:center;background:#fff}
+#konfigurator .fotoplatz img{width:100%;height:100%;object-fit:contain}
+#konfigurator .ansicht.ohne3d .nur3d,#konfigurator .ansicht.mit-foto .nur3d{display:none}
+#konfigurator .v3d-ersatz{display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center}
+#konfigurator .v3d-ersatz svg{width:min(70%,360px);height:auto;opacity:.55}
+#konfigurator .konf-leer{padding:40px 24px}
+#konfigurator .kb-preis-fehlt{font-size:13px;font-weight:500;opacity:.75}
+#konfigurator .kachel-knoepfe{gap:4px}
+/* Baum: Positionen unter dem Fahrzeug */
+#konfigurator .kb-posliste{list-style:none;margin:0;padding:0}
+#konfigurator .kb-zeile.pos{cursor:pointer}
+#konfigurator .kb-zeile.pos .kb-artname{font-size:12.5px}
+#konfigurator .kb-zeile.ueber{cursor:default;padding-top:6px}
+#konfigurator .kb-ueber{font:700 10.5px var(--f-mono,monospace);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+#konfigurator .kb-typ{font-size:12px;color:var(--muted);width:14px;text-align:center}
+#konfigurator .kb-rz{font-style:normal;margin-left:4px;color:var(--accent-ink,#8a6a00);background:#FFF3C4;border-radius:6px;padding:0 4px}
+#konfigurator .kb-postitel{margin:0;font-size:20px}
+#konfigurator .kb-postitel code{font-size:13px;color:var(--muted)}
+#konfigurator .kb-posregeln{margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
+#konfigurator .kb-posfelder{margin:8px 0 14px}
+#konfigurator .kb-zeile.kb-weg{cursor:default;opacity:.85}#konfigurator .kb-zeile.kb-weg .kb-nm{color:var(--muted)}
+#konfigurator .kachel-weg{display:inline-block;margin-top:4px;font-size:11px;font-weight:600;color:var(--bad);background:#FDECEA;border-radius:8px;padding:1px 7px}
+#konfigurator .kb-nurkat{margin-bottom:12px}

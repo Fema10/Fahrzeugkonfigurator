@@ -48,7 +48,20 @@
     return r;
   }
 
+  /** Fehler beim Start sichtbar machen statt einer leeren Seite */
+  function startFehler(e) {
+    console.error("[Konfigurator] Start fehlgeschlagen:", e);
+    const r = K.root || document.getElementById("konfigurator") || document.body;
+    const box = document.createElement("div");
+    box.setAttribute("style", "margin:16px;padding:14px 16px;border:2px solid #C0392B;border-radius:8px;background:#FFF5F4;color:#222;font:14px/1.45 system-ui,sans-serif");
+    box.innerHTML = "<b>Der Konfigurator konnte nicht starten.</b><br>Bitte diese Meldung weitergeben:<pre style='white-space:pre-wrap;margin:8px 0 0;font-size:12px'></pre>";
+    box.querySelector("pre").textContent = String(e && (e.stack || e.message) || e);
+    r.insertBefore(box, r.firstChild);
+  }
   async function start() {
+    try { await starten(); } catch (e) { startFehler(e); }
+  }
+  async function starten() {
     if (K.gestartet) return; K.gestartet = true;
     K.root = einhaengen();
     navBauen(); K.render();

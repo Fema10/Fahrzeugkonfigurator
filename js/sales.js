@@ -90,7 +90,13 @@
   const nachfahren = (mo, gid) => { const out = [gid]; for (const k of kinder(mo, gid)) out.push(...nachfahren(mo, k.id)); return out; };
   const pfad = (mo, gid) => { const out = []; let g = mo.gruppen.find(x => x.id === gid); while (g) { out.unshift(g); g = mo.gruppen.find(x => x.id === g.eltern); } return out; };
   K.bildUrl = id => id ? "/_blob/" + id : null;
-  const produktBild = (p, farbe) => p.bild ? `<img src="${K.bildUrl(p.bild)}" alt="" loading="lazy">` : K.silhouette(p.visual?.typ, farbe || "var(--ink)");
+  /** Bild aus dem Artikelstamm (Spalte BILD/DOCUMENTS der Artikel-Abfrage) */
+  K.artikelBild = code => (code && K.Store.artikelZu(code)?.bild) || "";
+  /** Bild mit Ersatz: lädt das Bild nicht, erscheint die Grafik */
+  K.bildMitErsatz = (url, ersatz) => `<img src="${esc(url)}" alt="" loading="lazy" data-ersatz="${esc(ersatz)}">`;
+  K.produktBildHtml = (p, farbe) => { const ers = K.silhouette(p.visual?.typ, farbe || "var(--ink)"); if (p.bild) return `<img src="${K.bildUrl(p.bild)}" alt="" loading="lazy">`; const a = K.artikelBild(p.code); return a ? K.bildMitErsatz(a, ers) : ers; };
+  const produktBild = (p, farbe) => K.produktBildHtml(p, farbe);
+  document.addEventListener("error", e => { const t = e.target; if (t && t.tagName === "IMG" && t.dataset && t.dataset.ersatz != null && t.parentNode) { const d = document.createElement("span"); d.className = "bild-ersatz"; d.title = "Bild nicht geladen: " + t.src; d.innerHTML = t.dataset.ersatz; console.info("[Konfigurator] Bild nicht geladen:", t.src); t.replaceWith(d); } }, true);
   function gruppenBild(mo, g) {
     if (g.bild) return `<img src="${K.bildUrl(g.bild)}" alt="">`;
     const p = mo.produkte.find(x => nachfahren(mo, g.id).includes(x.gruppe));
@@ -106,7 +112,7 @@
         <div class="kachel-titel"><b>${esc(p.name)}</b><span class="info" title="${esc(p.beschreibung)}" tabindex="0" aria-label="${esc(p.beschreibung)}">i</span>
           <button type="button" class="stern" data-act="favorit" data-p="${p.id}" aria-pressed="${fav}" title="${fav ? "Aus Favoriten entfernen" : "Zu Favoriten"}">${fav ? "★" : "☆"}</button></div>
         <span class="mono klein gedimmt">${esc(p.code || p.artnr || "")}</span>
-        <div class="kachel-fuss"><span class="num">ab ${K.eur(mo ? abPreis(mo, p) : p.basispreis)}</span><button type="button" class="zahnrad" data-act="konfigStart" data-p="${p.id}" title="Konfigurieren" aria-label="Konfigurieren">⚙</button></div>
+        <div class="kachel-fuss"><span class="num">ab ${K.eur(mo ? abPreis(mo, p) : p.basispreis)}</span><span class="row kachel-knoepfe">${K.Store.schreiben && !K.kat.entwurf ? `<button type="button" class="zahnrad" data-act="kbBearbeiten" data-p="${p.id}" title="Im Katalog aufbauen bearbeiten" aria-label="${esc(p.name)} bearbeiten">✎</button><button type="button" class="zahnrad loeschen" data-act="katLoeschen" data-p="${p.id}" title="Löschen" aria-label="${esc(p.name)} löschen">🗑</button>` : ""}<button type="button" class="zahnrad" data-act="konfigStart" data-p="${p.id}" title="Konfigurieren" aria-label="Konfigurieren">⚙</button></span></div>
       </div></article>`;
   }
   function baum(mo, gid, tiefe) {
@@ -136,7 +142,9 @@
     for (const [mid, wid] of Object.entries(k.filter)) if (wid) prods = prods.filter(p => E.produktMerkmale(mo, p).some(x => x.m.id === mid && x.werte.some(v => v.id === wid)));
     const ziel = K.konf.ziel;
     const krumen = k.gruppe === "fav" ? ["Favoriten"] : ["Katalog", ...(k.gruppe ? pfad(mo, k.gruppe).map(g => g.name) : [])];
-    return `${K.kat.entwurf ? `<div class="hinweis warn" style="margin-bottom:12px"><b>Vorschau des Entwurfs.</b> So sieht der Katalog nach der Freigabe aus. <button class="btn klein" type="button" data-act="katZumBau">Zurück zum Aufbau</button> <a class="btn klein primary" href="#studio-freigabe">Freigeben</a></div>` : ""}${ziel ? `<div class="hinweis" style="margin-bottom:12px">Das konfigurierte Fahrzeug wird als neue Position in <b>${esc(ziel.nr)}</b> übernommen. <button class="btn klein" type="button" data-act="zielAbbrechen">Abbrechen</button></div>` : ""}
+    const offen = !K.kat.entwurf && K.freigabeOffen ? K.freigabeOffen() : 0;
+    const offenHinweis = offen ? `<div class="hinweis" style="margin-bottom:12px"><b>Der Katalog zeigt die freigegebene Version${live()?.version ? " " + live().version : ""}.</b> Im Studio gibt es ${offen === 1 ? "1 Änderung" : offen + " Änderungen"}, die noch nicht freigegeben ${offen === 1 ? "ist" : "sind"}. Erst nach der Freigabe sieht der Vertrieb den Stand aus „Katalog aufbauen“.${K.Store.schreiben ? ` <button class="btn klein" type="button" data-act="katEntwurfZeigen">Entwurf ansehen</button> <a class="btn klein primary" href="#studio-freigabe" data-act="katZurFreigabe">Zur Freigabe</a>` : ""}</div>` : "";
+    return `${offenHinweis}${K.kat.entwurf ? `<div class="hinweis warn" style="margin-bottom:12px"><b>Vorschau des Entwurfs.</b> So sieht der Katalog nach der Freigabe aus. <button class="btn klein" type="button" data-act="katZumBau">Zurück zum Aufbau</button> <a class="btn klein primary" href="#studio-freigabe">Freigeben</a></div>` : ""}${ziel ? `<div class="hinweis" style="margin-bottom:12px">Das konfigurierte Fahrzeug wird als neue Position in <b>${esc(ziel.nr)}</b> übernommen. <button class="btn klein" type="button" data-act="zielAbbrechen">Abbrechen</button></div>` : ""}
     <div class="katalog">
       <nav class="baum panel" aria-label="Produktgruppen">
         <input type="search" id="kat-suche" data-in="katSuche" placeholder="Suche im Katalog" value="${esc(k.suche)}">
@@ -150,6 +158,18 @@
         ${prods.length ? `<div class="kacheln">${prods.map(p => produktKarte(p, mo)).join("")}</div>` : `<div class="leer">In dieser Auswahl gibt es keine Fahrzeuge.</div>`}
       </section></div>`;
   });
+  /** Fahrzeug im Studio › Katalog aufbauen öffnen (ändern, Codes, löschen) */
+  K.act.kbBearbeiten = el => { const pid = el.dataset.p, mo = S().entwurf; if (!mo) return;
+    if (!mo.produkte.some(x => x.id === pid)) { const lp = S().live?.produkte.find(x => x.id === pid);
+      return K.sheet(`<h3>${esc(lp?.name || "Fahrzeug")} löschen?</h3><p>Dieses Fahrzeug ist im Katalog aufbauen schon entfernt und steht nur noch hier im Katalog.</p>
+        <div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-act="sheetZu">Abbrechen</button><button class="btn gefahr" type="button" data-act="kbRestLoeschen" data-p="${esc(pid)}">Auch aus dem Katalog löschen</button></div><p class="klein gedimmt">Zurückholen danach über Studio › Protokoll.</p>`); }
+    K.kat.entwurf = false; K.konf.entwurf = false; K.kb.sel = "p:" + pid; K.kb.pos = null; K.kb.loeschen = null; K.gehe("studio-katalog"); };
+  /** Fahrzeug direkt aus dem Katalog löschen (Entwurf und Katalog, Kopie im Protokoll) */
+  K.act.katLoeschen = el => { const p = (S().live?.produkte || []).find(x => x.id === el.dataset.p) || E.produkt(S().entwurf, el.dataset.p); if (!p) return;
+    K.sheet(`<h3>${esc(p.name)} löschen?</h3><p>Das Fahrzeug wird aus dem Katalog und aus Katalog aufbauen entfernt. Bestehende Angebote behalten ihre Positionen.</p><div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-act="sheetZu">Abbrechen</button><button class="btn gefahr" type="button" data-act="kbRestLoeschen" data-p="${esc(p.id)}">Löschen</button></div><p class="klein gedimmt">Zurückholen über Studio › Protokoll.</p>`); };
+  K.act.konfAnsicht = () => { K.konf.zeige3d = !K.konf.zeige3d; K.render(); };
+  K.act.katEntwurfZeigen = () => { K.kat.entwurf = true; K.render(); };
+  K.act.katZurFreigabe = () => { K.sheetZu && K.sheetZu(); K.gehe("studio-freigabe"); };
   K.act.katZumBau = () => { K.kat.entwurf = false; K.gehe("studio-katalog"); };
   K.act.katGruppe = el => { K.kat.gruppe = el.dataset.g; K.render(); };
   K.act.katAuf = el => { K.kat.offen[el.dataset.g] = !(K.kat.offen[el.dataset.g] ?? true); K.render(); };
@@ -163,6 +183,7 @@
   /* Vorschaubild eines Werts: hochgeladenes Bild, Farbfeld oder schematische Grafik */
   K.wertGrafik = (m, w, i, p) => {
     if (w.bild) return `<img src="${K.bildUrl(w.bild)}" alt="" loading="lazy">`;
+    const ab = !w.hex && K.artikelBild(w.code); if (ab) return K.bildMitErsatz(ab, K.wertGrafik(m, Object.assign({}, w, { code: "" }), i, p));
     if (w.hex) return `<span class="farbkachel" style="background:${esc(w.hex)}"></span>`;
     const farben = ["#2E9E5B", "#1F3F9A", "#B23AC4", "#C8312B", "#2BB3A5", "#8A5A2B", "#D98C00", "#56606B"];
     const f = farben[i % farben.length], typ = p?.visual?.typ || "semi";
@@ -251,7 +272,7 @@
     const ga = p.grundausstattung || [];
     const gaHtml = !ga.length ? "" : `<details class="ga-block" ${k.gaOffen ? "open" : ""}><summary data-act="konfGa"><b>Grundausstattung</b><span class="gedimmt klein">${ga.length} Positionen inklusive</span></summary>
       ${[...new Set(ga.map(x => x.gruppe || ""))].map(gr => `${gr ? `<div class="eyebrow">${esc(gr)}</div>` : ""}<ul>${ga.filter(x => (x.gruppe || "") === gr).map(x => `<li><code>${esc(x.code)}</code> ${esc(x.name)}</li>`).join("")}</ul>`).join("")}</details>`;
-    if (!bereiche.length && !["kalkulation", "stueckliste"].includes(k.tab)) links = gaHtml || `<div class="leer">Für dieses Fahrzeug gibt es keine Auswahl.</div>`;
+    if (!bereiche.length && !["kalkulation", "stueckliste"].includes(k.tab)) links = gaHtml || `<div class="leer konf-leer"><b>Für dieses Fahrzeug sind noch keine Codes hinterlegt.</b><br>Es wird mit dem Grundpreis${p.basispreis ? ` von ${K.eur(p.basispreis)}` : ""} angeboten.${K.Store.schreiben ? `<br><br><button class="btn primary" type="button" data-act="kbBearbeiten" data-p="${p.id}">Codes im Katalog aufbauen hinzufügen</button>` : ""}</div>`;
     else if (bereiche.includes(k.tab)) {
       const imBereich = pm.filter(x => E.bereich(x.m) === k.tab), abschnitte = [...new Set(imBereich.map(x => x.m.abschnitt || ""))];
       links = (k.tab === bereiche[0] ? gaHtml : "") + abschnitte.map(ab => `<section class="abschnittblock">${ab && ab !== k.tab ? `<h2>${esc(ab)}</h2>` : ""}${imBereich.filter(x => (x.m.abschnitt || "") === ab).map(x => merkmalHtml(mo, p, x.m, x.werte, g, gs, k.sel)).join("")}</section>`).join("");
@@ -267,16 +288,16 @@
         <tr class="summe"><td colspan="3">Summe je Fahrzeug</td><td class="r num">${K.eur(preis.einzel)}</td><td class="r num">${K.eur(preis.kosten)}</td><td class="r num">${K.eur(db)}</td></tr></tbody></table></div>
         <p class="klein gedimmt" style="margin-top:8px">Marge ${K.zahl(marge, 1)} %. Kalkulationswerte sind intern und erscheinen nicht im Angebot.</p>`;
     }
-    const ziel = k.ziel;
+    const ziel = k.ziel, foto = p.bild ? K.bildUrl(p.bild) : K.artikelBild(p.code);
     K.nach(v => { const pl = v.querySelector("[data-viewer]"); if (pl) K.viewerEinhaengen(pl, mo, p, k.sel); });
     const zahl = b => offenAlle.filter(m => E.bereich(m) === b).length;
     const uebernehmenText = k.entwurf ? "" : ziel && ziel.idx != null ? `Position ${(ziel.idx + 1) * 10} aktualisieren` : ziel ? `In ${esc(ziel.nr)} übernehmen` : "Übernehmen";
-    return `${k.entwurf ? `<div class="hinweis warn" style="margin-bottom:10px">Sie testen den <b>Entwurf</b> des Modells. Das Ergebnis kann nicht in Angebote übernommen werden. <a href="#studio-regeln">Zurück ins Studio</a></div>` : ""}
+    return `${k.entwurf ? `<div class="hinweis warn" style="margin-bottom:10px">Sie testen den <b>Entwurf</b> des Modells. Das Ergebnis kann nicht in Angebote übernommen werden. <button type="button" class="link" data-act="kbBearbeiten" data-p="${p.id}">Zurück zum Katalog aufbauen</button></div>` : ""}
     <header class="konf-bar">
       <span class="kb-bild">${produktBild(p, "currentColor")}</span>
       <div class="kb-name"><b>${esc(p.name)}</b><span class="mono">${esc(p.code || p.artnr || "")}</span></div>
       <span class="kb-version">${k.entwurf ? "Entwurf" : "Modell v" + mo.version}</span>
-      <div class="kb-preis num">${K.eur2(preis.einzel)}</div>
+      <div class="kb-preis num">${preis.einzel || preis.zeilen.some(z => z.preis) ? K.eur2(preis.einzel) : `<span class="kb-preis-fehlt" title="Weder Grundpreis noch Preise an den Codes hinterlegt">kein Preis hinterlegt</span>`}</div>
       ${uebernehmenText ? `<button class="btn gelb" type="button" data-act="konfUebernehmen">✓ ${uebernehmenText}</button>` : ""}
       ${ziel && ziel.idx != null ? `<button class="btn kb-btn" type="button" data-act="konfZielLoesen">Als neue Position</button>` : ""}
       <button class="btn kb-btn" type="button" data-act="konfSchliessen">✕ Schließen</button>
@@ -290,9 +311,9 @@
         <div class="abschnitte">${links}</div>
       </div>
       <aside class="side">
-        <div class="panel ansicht"><div data-viewer class="viewerplatz"></div>
-          <div class="row zwischen" style="padding:0 4px"><span class="gedimmt klein">${offenAlle.length ? `⚠ ${offenAlle.length} Pflichtangaben offen` : "Konfiguration vollständig"}</span>
-            <span class="row"><button class="btn klein" type="button" data-act="export3d" data-f="png">Bild speichern</button><button class="btn klein" type="button" data-act="export3d" data-f="glb">3D-Szene exportieren</button></span></div></div>
+        <div class="panel ansicht${foto && !k.zeige3d ? " mit-foto" : ""}">${foto && !k.zeige3d ? `<div class="viewerplatz fotoplatz">${K.bildMitErsatz(foto, `<div class="v3d-leer">${K.silhouette(p.visual?.typ, "var(--muted)")}</div>`)}</div>` : `<div data-viewer class="viewerplatz"></div>`}
+          <div class="row zwischen" style="padding:0 4px"><span class="gedimmt klein">${offenAlle.length ? `⚠ ${offenAlle.length} Pflichtangaben offen` : bereiche.length ? "Konfiguration vollständig" : ""}</span>
+            <span class="row">${foto ? `<button class="btn klein" type="button" data-act="konfAnsicht">${k.zeige3d ? "Foto" : "3D-Ansicht"}</button>` : ""}<span class="nur3d row"><button class="btn klein" type="button" data-act="export3d" data-f="png">Bild speichern</button><button class="btn klein" type="button" data-act="export3d" data-f="glb">3D-Szene exportieren</button></span></span></div></div>
         <details class="panel regeln"><summary>Aktive Regeln (${regeln.length})</summary>
           <ul class="regelliste">${regeln.map(r => `<li><span class="mono">${r.id}</span><span>${esc(r.hinweis || E.satz(mo, r))}</span></li>`).join("") || "<li><span></span><span>Keine Einschränkungen aktiv.</span></li>"}</ul></details>
         <div class="row"><button class="btn klein" type="button" data-act="konfReset">Auswahl zurücksetzen</button><select id="konf-produkt" data-act="konfProdukt" aria-label="Grundfahrzeug wechseln">${mo.produkte.filter(x => x.aktiv !== false).map(x => `<option value="${x.id}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div>

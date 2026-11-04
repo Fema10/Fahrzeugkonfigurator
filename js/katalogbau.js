@@ -171,7 +171,7 @@
 
   /* ---------- Bilder (in APplus ohne Dateiablage: verkleinert im Modell) ---------- */
   const alteBildUrl = K.bildUrl;
-  K.bildUrl = id => id && String(id).startsWith("data:") ? id : alteBildUrl(id);
+  K.bildUrl = id => !id ? null : /^(data:|blob:|https?:|\/\/|\.{0,2}\/)/i.test(String(id)) || /[\/.]/.test(String(id)) ? String(id) : alteBildUrl(id);
   async function bildLesen(el) {
     if (el.dataset.weg) return null;
     if (K.assets) return St().bildHochladen(el);
@@ -191,12 +191,28 @@
     const mo = ent(); if (!mo) return St().keinEntwurf();
     const kb = K.kb; if (kb.sel && !objekt(kb.sel)) kb.sel = "";
     const leer = !mo.gruppen.length && !mo.produkte.length;
-    return `<div class="kopfzeile"><div><div class="eyebrow">Studio · Entwurf</div><h2>Katalog aufbauen</h2><p>Familien anlegen und per Drag &amp; Drop ordnen. Artikel aus dem Artikelstamm rechts auf eine Familie ziehen ergibt ein Fahrzeug, auf ein Fahrzeug ziehen ergibt Vertriebscodes. Mehrere Artikel ankreuzen und zusammen ziehen.</p></div>
+    return `<div class="kopfzeile"><div><div class="eyebrow">Studio · Entwurf</div><h2>Katalog aufbauen</h2><p>Familien anlegen und per Drag &amp; Drop ordnen. Artikel aus dem Artikelstamm rechts auf eine Familie ziehen ergibt ein Fahrzeug, auf ein Fahrzeug ziehen ergibt Vertriebscodes. Rechts Artikel suchen und mit „Übernehmen“ oder per Ziehen einfügen.</p></div>
       <div class="row"><button class="btn" type="button" data-act="kbVorschau">Vorschau im Katalog</button><a class="btn primary" href="#studio-freigabe">Freigeben</a>${ro() ? "" : `<button class="btn klein gefahr-text" type="button" data-act="kbLeeren">${kb.leeren ? "Wirklich alles leeren?" : "Neu beginnen"}</button>`}</div></div>
       ${leer ? `<div class="hinweis">Der Entwurf ist leer. Legen Sie links mit „+ Familie“ die erste Familie an, z. B. „Holztransport“.</div>` : mo.produkte.some(p => /^(ST|TB|TB3|PA|LN)$/.test(p.id)) ? `<div class="hinweis">Hier stehen noch die <b>Beispieldaten</b> (Schwertransport, Holztransport …). Mit „Neu beginnen“ starten Sie mit einem leeren Katalog. Der Vertrieb sieht weiter den alten Stand, bis Sie freigeben.</div>` : ""}
+      ${nurImKatalogHinweis(mo)}
       <div class="kb-layout">${baumAnsicht(mo)}<section class="kb-mitte">${mitte(mo)}</section>${pool(mo)}</div>`;
   });
   function objekt(sel) { if (!sel) return null; const id = sel.slice(2); return sel[0] === "g" ? gruppe(id) : E.produkt(ent(), id); }
+
+  /** Regeln, die bei diesem Fahrzeug gelten und die Position (Gruppe) betreffen */
+  const regelnZu = (mo, p, mid) => mo.regeln.filter(r => E.imGeltungsbereich(mo, r, p) && (r.typ === "tabelle" ? (r.tabelle?.merkmale || []).includes(mid) : (r.wenn || []).some(c => c.merkmal === mid) || r.dann?.merkmal === mid));
+  const typName = m => (E.GRUPPENTYPEN.find(([k]) => k === E.gruppentyp(m)) || [, "Auswahl"])[1];
+  const typKurz = m => ({ kacheln: "Kacheln", liste: "Liste", dropdown: "Dropdown", mehrfach: "mehrere" })[E.gruppentyp(m)] || "Auswahl";
+  const typIkon = m => ({ kacheln: "▦", liste: "☰", dropdown: "▾", mehrfach: "☑" })[E.gruppentyp(m)] || "•";
+  /** Fahrzeuge, die der Vertrieb noch sieht (freigegebene Version), die im Entwurf aber fehlen */
+  const nurLive = mo => { const lv = S().live; if (!lv || lv === mo) return []; const da = new Set(mo.produkte.map(p => p.id)); return (lv.produkte || []).filter(p => !da.has(p.id)); };
+  /* ---------- Fahrzeuge, die nur noch im freigegebenen Katalog stehen ---------- */
+  K.nurImKatalog = () => ent() ? nurLive(ent()) : [];
+  function nurImKatalogHinweis(mo) {
+    const fehlt = K.nurImKatalog(); if (!fehlt.length || ro()) return "";
+    return `<div class="hinweis warn kb-nurkat"><b>${fehlt.length === 1 ? "1 Fahrzeug steht" : fehlt.length + " Fahrzeuge stehen"} noch im Katalog des Vertriebs, aber nicht mehr hier</b> (${fehlt.slice(0, 4).map(p => esc(p.name)).join(", ")}${fehlt.length > 4 ? " …" : ""}). Das stammt aus einem früheren Löschen, das nur hier wirkte.
+      <div class="row" style="margin-top:8px"><button class="btn klein gefahr" type="button" data-act="kbRestLoeschen">Auch aus dem Katalog löschen</button><span class="klein gedimmt">Zurückholen danach über Studio › Protokoll.</span></div></div>`;
+  }
 
   function baumAnsicht(mo) {
     const kb = K.kb;
@@ -208,13 +224,19 @@
           ${ro() ? "" : `<button type="button" class="kb-plus" data-act="kbFamNeu" data-g="${g.id}" title="Unterfamilie anlegen" aria-label="Unterfamilie anlegen">+</button>`}</div>
         ${offen ? `<ul>${ks.map(k => famZeile(k, t + 1)).join("")}${fs.map(p => artZeile(p, t + 1)).join("")}</ul>` : ""}</li>`;
     };
-    const artZeile = (p, t) => `<li><div class="kb-zeile art${kb.sel === "p:" + p.id ? " aktiv" : ""}${p.aktiv === false ? " inaktiv" : ""}" style="--t:${t}" draggable="${!ro()}" data-drag="p:${p.id}" data-drop="p:${p.id}">
-        <span class="kb-auf"></span><button type="button" class="kb-nm" data-act="kbWahl" data-s="p:${p.id}"><span class="kb-ik">▢</span><span class="kb-artname">${esc(p.name)}<code>${esc(p.code || "")}</code></span></button><span class="kb-zahl" title="Vertriebscodes">${codesVon(p)}</span></div></li>`;
+    const artZeile = (p, t) => {
+      const pm = E.produktMerkmale(mo, p), offen = kb.offen["p:" + p.id] ?? (kb.sel === "p:" + p.id), abs = [...new Set(pm.map(x => x.m.abschnitt || ""))];
+      const posZeile = (x, tt) => { const n = regelnZu(mo, p, x.m.id).length;
+        return `<li><div class="kb-zeile pos${kb.sel === "p:" + p.id && kb.pos === x.m.id ? " aktiv" : ""}" style="--t:${tt}" data-drop="m:${x.m.id}"><span class="kb-auf"></span><button type="button" class="kb-nm" data-act="kbWahl" data-s="p:${p.id}" data-pos="${x.m.id}" title="${esc(x.m.name)}: ${esc(typName(x.m))}"><span class="kb-ik kb-typ" aria-hidden="true">${typIkon(x.m)}</span><span class="kb-artname">${esc(x.m.name)}<code>${esc(x.m.code || "")}${x.m.code ? " · " : ""}${esc(typKurz(x.m))}</code></span></button><span class="kb-zahl" title="Codes${n ? ", " + n + " Regeln" : ""}">${x.werte.length}${n ? `<i class="kb-rz" title="${n} Regeln">§${n}</i>` : ""}</span></div></li>`; };
+      return `<li><div class="kb-zeile art${kb.sel === "p:" + p.id && !kb.pos ? " aktiv" : ""}${p.aktiv === false ? " inaktiv" : ""}" style="--t:${t}" draggable="${!ro()}" data-drag="p:${p.id}" data-drop="p:${p.id}">
+        <button type="button" class="kb-auf" data-act="kbAufP" data-p="${p.id}" aria-label="${offen ? "Positionen zuklappen" : "Positionen aufklappen"}">${pm.length ? (offen ? "▾" : "▸") : ""}</button><button type="button" class="kb-nm" data-act="kbWahl" data-s="p:${p.id}"><span class="kb-ik">▢</span><span class="kb-artname">${esc(p.name)}<code>${esc(p.code || "")}</code></span></button><span class="kb-zahl" title="Vertriebscodes">${codesVon(p)}</span></div>
+        ${offen && pm.length ? `<ul class="kb-posliste">${abs.map(ab => `${ab || abs.length > 1 ? `<li><div class="kb-zeile ueber" style="--t:${t + 1}"><span class="kb-auf"></span><span class="kb-ueber">${esc(ab || "Ohne Überschrift")}</span></div></li>` : ""}${pm.filter(x => (x.m.abschnitt || "") === ab).map(x => posZeile(x, t + (ab || abs.length > 1 ? 2 : 1))).join("")}`).join("")}</ul>` : ""}</li>`;
+    };
     const ohne = mo.produkte.filter(p => !p.gruppe || !gruppe(p.gruppe));
     return `<nav class="panel kb-baum" aria-label="Katalog">
       <div class="kb-baumkopf"><b>Katalog</b>${ro() ? "" : `<button class="btn klein" type="button" data-act="kbFamNeu" data-g="">+ Familie</button>`}</div>
       <ul class="kb-liste" data-drop="g:">${kinder("").map(g => famZeile(g, 0)).join("")}
-        ${ohne.length ? `<li><div class="kb-zeile fam gedimmt" style="--t:0"><span class="kb-auf"></span><span class="kb-nm">Ohne Familie (nicht im Katalog)</span></div><ul>${ohne.map(p => artZeile(p, 1)).join("")}</ul></li>` : ""}</ul>
+        ${ohne.length ? `<li><div class="kb-zeile fam gedimmt" style="--t:0"><span class="kb-auf"></span><span class="kb-nm">Ohne Familie (nicht im Katalog)</span></div><ul>${ohne.map(p => artZeile(p, 1)).join("")}</ul></li>` : ""}
       ${ro() ? "" : `<div class="kb-wurzel" data-drop="g:">Hierher ziehen = oberste Ebene</div>`}</nav>`;
   }
 
@@ -228,15 +250,17 @@
     return `<div class="panel kb-objekt" data-drop="g:${g.id}">
       <div class="eyebrow">${pfad.length ? pfad.map(x => esc(x.name)).join(" › ") + " ›" : "Familie"}</div>
       <div class="kb-kopf"><input id="kb-gname" class="flach titelfeld" data-chg="kbGName" value="${esc(g.name)}" aria-label="Name der Familie" ${St().dis()}>
-        ${ro() ? "" : `<button type="button" class="btn klein gefahr-text" data-act="kbLoeschen">${K.kb.loeschen === "g:" + g.id ? "Wirklich löschen?" : "Löschen"}</button>`}</div>
+        ${ro() ? "" : `<button type="button" class="btn klein gefahr-text" data-act="kbLoeschen">${K.kb.loeschen === "g:" + g.id ? `Familie mit ${fs.length + ks.reduce((n, k) => n + E.familienArtikel(mo, k.id).length, 0)} Fahrzeugen löschen?` : "Löschen"}</button>`}</div>
       <div class="formgitter">
         <div class="feld"><label for="kb-geltern">liegt unter</label><select id="kb-geltern" data-act="kbGEltern" ${St().dis()}><option value="">– oberste Ebene –</option>${mo.gruppen.filter(x => x.id !== g.id && !istUnter(g.id, x.id)).map(x => `<option value="${x.id}" ${x.id === g.eltern ? "selected" : ""}>${esc(E.gruppenPfad(mo, x.id).map(y => y.name).join(" › "))}</option>`).join("")}</select></div>
         <div class="feld"><label>Bild im Katalog</label>${bildFeld(g.bild, "kbBild", `data-s="g:${g.id}"`)}</div></div>
       <div class="feld"><label for="kb-gbes">Beschreibung</label><textarea id="kb-gbes" rows="2" data-chg="kbGBes" ${St().dis()}>${esc(g.beschreibung || "")}</textarea></div>
       <h3>Inhalt</h3>
       ${ks.length || fs.length ? `<div class="kb-kacheln">${ks.map(k => `<button type="button" class="kb-kachel fam" data-act="kbWahl" data-s="g:${k.id}"><span>▤</span><b>${esc(k.name)}</b><small>${E.familienArtikel(mo, k.id).length} Fahrzeuge</small></button>`).join("")}
-        ${fs.map(p => `<button type="button" class="kb-kachel" data-act="kbWahl" data-s="p:${p.id}"><span class="kb-silh">${p.bild ? `<img src="${K.bildUrl(p.bild)}" alt="">` : K.silhouette(p.visual?.typ, "var(--ink)")}</span><b>${esc(p.name)}</b><small><code>${esc(p.code || "")}</code> · ${codesVon(p)} Codes</small></button>`).join("")}</div>` : ""}
-      <div class="kb-ablage">Fahrzeuge aus dem Artikelstamm hierher ziehen<br><span class="gedimmt klein">oder rechts ankreuzen und „Als Fahrzeuge hinzufügen“</span></div>
+        ${fs.map(p => `<div class="kb-kachel-w${K.kb.kachelLoeschen === p.id ? " frage" : ""}"><button type="button" class="kb-kachel" data-act="kbWahl" data-s="p:${p.id}"><span class="kb-silh">${K.produktBildHtml(p, "var(--ink)")}</span><b>${esc(p.name)}</b><small><code>${esc(p.code || "")}</code> · ${codesVon(p)} Codes</small></button>
+          ${ro() ? "" : K.kb.kachelLoeschen === p.id ? `<div class="kb-kachel-frage"><span>${esc(p.name)} löschen?</span><button type="button" class="btn klein gefahr" data-act="kbKachelLoeschenOk" data-p="${p.id}">Löschen</button><button type="button" class="btn klein ghost" data-act="kbKachelLoeschen" data-p="">Abbrechen</button></div>`
+            : `<span class="kb-kachel-akt"><button type="button" class="ikon" data-act="kbWahl" data-s="p:${p.id}" title="Bearbeiten" aria-label="${esc(p.name)} bearbeiten">✎</button><button type="button" class="ikon gefahr" data-act="kbKachelLoeschen" data-p="${p.id}" title="Löschen" aria-label="${esc(p.name)} löschen">🗑</button></span>`}</div>`).join("")}</div>` : ""}
+      <div class="kb-ablage">Fahrzeuge aus dem Artikelstamm hierher ziehen<br><span class="gedimmt klein">oder rechts suchen und „als Fahrzeug“ wählen</span></div>
       ${famStruktur(mo, g)}</div>`;
   }
   /** Struktur, die alle Fahrzeuge der Familie erben */
@@ -255,6 +279,24 @@
       return `<section class="kb-abschnitt"><div class="kb-abkopf"><span class="kb-abmarke">Überschrift</span><input id="kb-ab-${esc(E.slug(ab) || "x")}" class="flach" data-chg="kbAbName" data-ab="${esc(ab)}" value="${esc(ab || "Ohne Überschrift")}" aria-label="Überschrift" ${St().dis()}></div>
         ${gs.length ? `<div class="kb-gruppe fest"><div class="kb-gkopf"><b>Grundausstattung</b><span class="gedimmt klein">fest enthalten, keine Auswahl</span></div><div class="kb-chips">${gs.map(({ g, i }) => `<span class="kb-chip std"><code>${esc(g.code)}</code><span class="kb-cn">${esc(g.name)}</span>${ro() ? "" : `<button type="button" data-act="kbGaWeg" data-i="${i}" title="Entfernen" aria-label="Entfernen">✕</button>`}</span>`).join("")}</div></div>` : ""}
         ${ms.map(karte).join("")}</section>`; }).join("");
+  }
+  /** Eine Position (Gruppe) eines Fahrzeugs: Art der Auswahl, Codes mit Feldtyp, Regeln */
+  function position(mo, p, x, karte) {
+    const rs = regelnZu(mo, p, x.m.id), m = x.m; K.st.kontext = "p:" + p.id;
+    const andere = mo.produkte.filter(q => q !== p && E.produktMerkmale(mo, q).some(y => y.m.id === m.id));
+    return `<div class="panel kb-objekt kb-position" data-drop="m:${m.id}">
+      <div class="eyebrow">${E.gruppenPfad(mo, p.gruppe).map(g => esc(g.name)).join(" › ")} › <button type="button" class="link" data-act="kbPosZurueck">${esc(p.name)}</button>${m.abschnitt ? ` › ${esc(m.abschnitt)}` : ""}</div>
+      <div class="kb-kopf"><h2 class="kb-postitel">${esc(m.name)}${m.code ? ` <code>${esc(m.code)}</code>` : ""}</h2><button type="button" class="btn klein" data-act="kbPosZurueck">← Alle Positionen</button></div>
+      <div class="formgitter kb-posfelder">
+        <div class="feld"><label for="kb-pos-typ">Wie wird ausgewählt?</label><select id="kb-pos-typ" data-act="kbMTyp" data-m="${m.id}" ${St().dis()}>${E.GRUPPENTYPEN.map(([k, n]) => `<option value="${k}" ${E.gruppentyp(m) === k ? "selected" : ""}>${n}</option>`).join("")}</select><span class="klein gedimmt">${({ kacheln: "genau einen Code wählen, als Kacheln mit Bild", liste: "genau einen Code wählen, als Liste", dropdown: "genau einen Code wählen, als Auswahlfeld", mehrfach: "beliebig viele Codes ankreuzen" })[E.gruppentyp(m)] || ""}. Einzelne Codes können darunter einen eigenen Feldtyp haben (Ja/Nein, Zahl, Freitext, fest).</span></div>
+        ${m.typ !== "mehrfach" && E.wahlWerte(m, x.werte).length ? `<div class="feld"><label class="haken"><input type="checkbox" data-act="kbMPflicht" data-m="${m.id}" ${m.pflicht ? "checked" : ""} ${St().dis()}> Pflicht, ohne Vorauswahl</label><span class="klein gedimmt">Der Vertrieb muss selbst wählen.</span></div>` : ""}
+      </div>
+      ${andere.length ? `<p class="hinweis klein">Diese Position gibt es auch bei ${andere.length} weiteren Fahrzeug${andere.length === 1 ? "" : "en"} (${andere.slice(0, 3).map(q => esc(q.name)).join(", ")}${andere.length > 3 ? " …" : ""}). Name, Auswahlart und Feldtypen gelten dort ebenfalls.</p>` : ""}
+      <h3>Codes</h3>${karte(x)}
+      <section class="kb-posregeln"><div class="panelkopf"><h3>Regeln <span class="gedimmt">${rs.length}</span></h3>${ro() ? "" : `<span class="row"><button class="btn klein primary" type="button" data-act="kbRegelNeu" data-m="${m.id}" data-rolle="dann" title="Wenn etwas anderes gewählt ist, wird diese Position eingeschränkt">+ Regel: schränkt „${esc(m.name)}“ ein</button><button class="btn klein" type="button" data-act="kbRegelNeu" data-m="${m.id}" data-rolle="wenn" title="Die Auswahl hier schränkt andere Positionen ein">+ Regel: „${esc(m.name)}“ schränkt ein</button></span>`}</div>
+        ${rs.length ? `<div class="regelkarten">${rs.map(r => r.typ === "tabelle" ? `<div class="regelkarte"><div class="regelkopf"><b>${esc(r.id)}</b> Kombinationstabelle ${esc(r.name || "")} <a class="link" href="#studio-regeln" data-act="kbZuRegeln" data-p="${p.id}">in Regeln bearbeiten</a></div></div>` : K.studio.regelKarte(mo, r)).join("")}</div>` : `<p class="klein gedimmt">Noch keine Regeln für diese Position bei ${esc(p.name)}. Regeln sperren Codes, erlauben nur bestimmte oder wählen automatisch, abhängig von der Auswahl in anderen Positionen.</p>`}
+        <p class="klein gedimmt">Neue Regeln gelten für ${esc(p.name)}. Im Regel-Editor unter „Gilt für“ auf die ganze Familie erweiterbar.</p></section>
+    </div>`;
   }
   function fahrzeug(mo, p) {
     const kb = K.kb, pm = E.produktMerkmale(mo, p), q = kb.codeSuche.toLowerCase(), a = K.Store.artikelZu(p.code);
@@ -278,6 +320,9 @@
             ${ro() ? "" : `<button type="button" class="kb-x" data-act="kbWWeg" data-m="${x.m.id}" data-w="${w.id}" title="Vom Fahrzeug entfernen" aria-label="Entfernen">✕</button>`}
             ${K.wertExtras(x.m, w, "kb")}</div>`; }).join("")}</div></article>`;
     };
+    const posX = kb.pos && pm.find(x => x.m.id === kb.pos);
+    if (kb.pos && !posX) kb.pos = null;
+    if (posX) return position(mo, p, posX, karte);
     return `<div class="panel kb-objekt" data-drop="p:${p.id}">
       <div class="eyebrow">${E.gruppenPfad(mo, p.gruppe).map(x => esc(x.name)).join(" › ") || "Ohne Familie"} ›</div>
       <div class="kb-kopf"><input id="kb-pname" class="flach titelfeld" data-chg="kbPFeld" data-k="name" value="${esc(p.name)}" aria-label="Name" ${St().dis()}>
@@ -300,38 +345,61 @@
         ${ro() ? "" : `<div class="kb-ablage klein" data-drop="m:__neu">Hierher ziehen = neue Gruppe</div>`}</div></div>`;
   }
 
-  function pool(mo) {
-    const kb = K.kb, o = objekt(kb.sel), istFz = kb.sel[0] === "p", istFam = kb.sel[0] === "g", q = kb.poolSuche.trim();
-    const vorhanden = new Set(); if (istFz) for (const x of E.produktMerkmale(mo, o)) for (const w of x.werte) if (w.code) vorhanden.add(norm(w.code));
-    for (const p of mo.produkte) if (p.code && !istFz) vorhanden.add(norm(p.code));
-    // Verwendung: in wie vielen Fahrzeugen steckt der Artikel als Code oder ist er selbst ein Fahrzeug
-    const nutzung = new Map(); for (const p of mo.produkte) { if (p.code) nutzung.set(norm(p.code), "Fahrzeug"); for (const x of E.produktMerkmale(mo, p)) for (const w of x.werte) if (w.code) { const C = norm(w.code), alt = nutzung.get(C); if (alt !== "Fahrzeug") nutzung.set(C, (alt || 0) + 1); } }
-    let liste = [];
-    if (kb.poolTab === "artikel") {
-      if (K.Store.artikelQuelle) liste = (q ? K.Store.artikelSuche(q, 600) : [...K.Store.artikel.values()].slice(0, 300)).map(a => ({ code: a.code, name: a.name, preis: a.preis }));
-      if (kb.poolFilter === "frei") liste = liste.filter(a => !nutzung.has(norm(a.code))); else if (kb.poolFilter === "benutzt") liste = liste.filter(a => nutzung.has(norm(a.code)));
-      liste = liste.slice(0, 300);
-    } else {
-      const ql = q.toLowerCase(); for (const m of mo.merkmale) for (const w of m.werte) if (w.code && (!ql || (w.code + " " + w.name + " " + m.name).toLowerCase().includes(ql))) liste.push({ code: w.code, name: w.name, preis: w.preis, gruppe: m.name });
-      liste = liste.slice(0, 400);
-    }
-    const n = kb.poolWahl.size;
-    return `<aside class="panel kb-pool">
-      <div class="tabs-innen klein" role="tablist"><button type="button" role="tab" data-act="kbPoolTab" data-t="artikel" aria-selected="${kb.poolTab === "artikel"}">Artikelstamm</button><button type="button" role="tab" data-act="kbPoolTab" data-t="codes" aria-selected="${kb.poolTab === "codes"}">Codes im Modell</button></div>
-      ${kb.poolTab === "artikel" && K.Store.artikelQuelle ? `<div class="kb-filter" role="radiogroup" aria-label="Filter">${[["", "alle"], ["frei", "noch nicht verwendet"], ["benutzt", "schon verwendet"]].map(([k, n]) => `<button type="button" class="chipbtn" data-act="kbPoolFilter" data-f="${k}" aria-pressed="${(kb.poolFilter || "") === k}">${n}</button>`).join("")}</div>` : ""}
-      <input id="kb-psuche" type="search" data-in="kbPSuche" placeholder="${kb.poolTab === "artikel" ? "Artikelnummer oder Bezeichnung" : "Code, Bezeichnung oder Gruppe"}" value="${esc(kb.poolSuche)}" autocomplete="off">
-      ${kb.poolTab === "artikel" && !K.Store.artikelQuelle ? `<div class="hinweis klein">Kein Artikelstamm geladen. In APplus die Abfrage <code>queries.artikel</code> auf Tabelle ARTIKEL einrichten oder unter Excel-Import › Familien und Varianten eine Mappe mit Blatt „Import“ einlesen. Codes lassen sich auch über „Liste einfügen“ eintragen.</div>` : ""}
-      <div class="kb-poolaktion">${n ? `<b>${n}</b> ausgewählt · <button type="button" class="link" data-act="kbPoolLeer">aufheben</button>` : `<span class="gedimmt klein">Ankreuzen für mehrere, dann ziehen</span>`}
-        ${n && istFz && !ro() ? `<button class="btn primary klein" type="button" data-act="kbPoolZuFz">Zum Fahrzeug hinzufügen</button>` : ""}${n && istFam && !ro() ? `<button class="btn primary klein" type="button" data-act="kbPoolZuFam">Als Fahrzeuge hinzufügen</button><button class="btn klein" type="button" data-act="kbPoolCodesFam" title="Die angekreuzten Artikel werden Vertriebscodes, die jedes Fahrzeug dieser Familie erbt">Als Codes für die ganze Familie</button>` : ""}</div>
-      <ul class="kb-poolliste">${liste.map(a => { const da = vorhanden.has(norm(a.code)), an = kb.poolWahl.has(a.code);
-        return `<li class="${da ? "da" : ""}${an ? " an" : ""}" draggable="${!ro()}" data-drag="a:${esc(a.code)}"><label><input type="checkbox" data-act="kbPoolWahl" data-c="${esc(a.code)}" ${an ? "checked" : ""}><code>${esc(a.code)}</code><span>${esc(a.name)}${a.gruppe ? ` <i class="gedimmt">${esc(a.gruppe)}</i>` : ""}</span></label>${nutzung.has(norm(a.code)) ? `<span class="kb-nutz" title="${nutzung.get(norm(a.code)) === "Fahrzeug" ? "ist ein Fahrzeug im Katalog" : "als Code in " + nutzung.get(norm(a.code)) + " Fahrzeugen"}">${nutzung.get(norm(a.code)) === "Fahrzeug" ? "Fzg." : "×" + nutzung.get(norm(a.code))}</span>` : ""}<span class="num klein">${a.preis ? K.eur(a.preis) : ""}</span></li>`; }).join("")}</ul>
-      ${kb.poolTab === "artikel" && K.Store.artikelQuelle && !q ? `<p class="klein gedimmt">${K.zahl(K.Store.artikel.size)} Artikel. Suchen grenzt die Liste ein.</p>` : ""}
-      ${liste.length ? `<button type="button" class="link klein" data-act="kbPoolAlle">alle ${liste.length} angezeigten ankreuzen</button>` : ""}</aside>`;
+  /* Artikelsuche rechts: nur ein Suchfeld mit Vorschlägen (Autocomplete). Treffer per „Übernehmen“,
+     Enter oder Ziehen in den Katalog. Gesucht wird im APplus-Artikelstamm und in den Codes des Modells. */
+  function treffer(mo, q) {
+    q = q.trim(); if (!q) return [];
+    const out = [], gesehen = new Set(), ql = q.toLowerCase();
+    if (K.Store.artikelQuelle) for (const a of K.Store.artikelSuche(q, 40)) { const C = norm(a.code); if (gesehen.has(C)) continue; gesehen.add(C); out.push({ code: a.code, name: a.name, preis: a.preis, bild: a.bild }); }
+    // Codes aus dem Modell nur, wenn kein echter Artikelstamm (APplus oder Excel) geladen ist
+    if (!K.Store.artikelQuelle || K.Store.artikelQuelle === "beispiel") for (const m of mo.merkmale) for (const w of m.werte) { if (!w.code || out.length >= 40) continue; const C = norm(w.code); if (gesehen.has(C) || !(w.code + " " + w.name).toLowerCase().includes(ql)) continue; gesehen.add(C); out.push({ code: w.code, name: w.name, preis: w.preis, gruppe: m.name }); }
+    const vorn = out.filter(x => x.code.toLowerCase().startsWith(ql)); return [...vorn, ...out.filter(x => !vorn.includes(x))].slice(0, 40);
   }
+  function quellZeile() {
+    const st = K.Store.abfrageStatus?.artikel, q = K.Store.artikelQuelle, n = K.Store.artikel.size, name = K.Store.abfragen().artikel;
+    if (q === "applus") return `<p class="kb-quelle ok klein">Quelle: APplus-Abfrage <code>${esc(st?.name || name)}</code> · ${K.zahl(n)} Artikel</p>`;
+    if (q === "excel") return `<p class="kb-quelle klein">Quelle: Artikel aus Excel-Import · ${K.zahl(n)} Artikel</p>`;
+    const grund = name ? (st?.fehler ? `Abfrage <code>${esc(name)}</code> nicht geladen: ${esc(st.fehler)}` : `Abfrage <code>${esc(name)}</code> nicht geladen`) : "Keine Artikel-Abfrage eingetragen";
+    return `<div class="hinweis klein kb-quelle"><b>${grund}.</b> Die Vorschläge kommen aus Beispieldaten bzw. den Codes im Modell. ${ro() ? "" : `<a href="#studio-einstellungen" data-act="geheAbfragen">Abfrage eintragen und testen</a>`}</div>`;
+  }
+  function pool(mo) {
+    const kb = K.kb, o = objekt(kb.sel), istFz = kb.sel[0] === "p", istFam = kb.sel[0] === "g", q = kb.poolSuche;
+    const vorhanden = new Set(); if (o && (istFz || istFam)) for (const x of istFz ? E.produktMerkmale(mo, o) : (o.merkmale || []).map(z => ({ werte: (E.merkmal(mo, z.id)?.werte || []).filter(w => !z.werte || z.werte.includes(w.id)) }))) for (const w of x.werte) if (w.code) vorhanden.add(norm(w.code));
+    const nutzung = new Map(); for (const p of mo.produkte) { if (p.code) nutzung.set(norm(p.code), "Fahrzeug"); for (const x of E.produktMerkmale(mo, p)) for (const w of x.werte) if (w.code) { const C = norm(w.code), alt = nutzung.get(C); if (alt !== "Fahrzeug") nutzung.set(C, (alt || 0) + 1); } }
+    const liste = treffer(mo, q), ziel = !ro() && o && (istFz || istFam), neu = liste.filter(a => !vorhanden.has(norm(a.code)));
+    if (kb.acIdx >= liste.length) kb.acIdx = Math.max(0, liste.length - 1);
+    const zielText = istFz ? `Ziel: <b>${esc(o.name)}</b>${kb.ziel && E.merkmal(mo, kb.ziel) ? ` › ${esc(E.merkmal(mo, kb.ziel).name)}` : ""}` : istFam ? `Ziel: Familie <b>${esc(o.name)}</b> (gilt für alle Fahrzeuge darin)` : "Links ein Fahrzeug oder eine Familie wählen.";
+    return `<aside class="panel kb-pool">
+      <h3 class="kb-pooltitel">Codes hinzufügen</h3>
+      <div class="kb-ac">
+        <input id="kb-psuche" type="search" data-in="kbPSuche" role="combobox" aria-autocomplete="list" aria-expanded="${!!liste.length}" aria-controls="kb-ac-liste" ${liste.length ? `aria-activedescendant="kb-ac-${kb.acIdx || 0}"` : ""} aria-label="Artikel suchen" placeholder="Artikelnummer oder Bezeichnung" value="${esc(q)}" autocomplete="off">
+        ${q.trim() ? (liste.length ? `<ul id="kb-ac-liste" class="kb-ac-liste" role="listbox">${liste.map((a, i) => { const da = vorhanden.has(norm(a.code)), nz = nutzung.get(norm(a.code));
+          return `<li id="kb-ac-${i}" role="option" aria-selected="${i === (kb.acIdx || 0)}" class="${da ? "da" : ""}" draggable="${!ro()}" data-drag="a:${esc(a.code)}" data-act="kbAcZeile" data-i="${i}">
+            <span class="kb-ac-text">${a.bild ? `<span class="kb-ac-bild">${K.bildMitErsatz(a.bild, "")}</span>` : ""}<code>${esc(a.code)}</code> <span>${esc(a.name || "")}</span>${a.gruppe ? ` <i class="gedimmt">${esc(a.gruppe)}</i>` : ""}</span>
+            <span class="kb-ac-info">${da ? `<span class="kb-nutz">schon drin</span>` : nz ? `<span class="kb-nutz" title="${nz === "Fahrzeug" ? "ist ein Fahrzeug im Katalog" : "als Code in " + nz + " Fahrzeugen"}">${nz === "Fahrzeug" ? "Fzg." : "×" + nz}</span>` : ""}<span class="num klein">${a.preis ? K.eur(a.preis) : ""}</span></span>
+            ${ziel && !da ? `<span class="kb-ac-knopf">${istFam ? `<button type="button" class="btn klein ghost" data-act="kbAlsFz" data-c="${esc(a.code)}" title="Als Fahrzeug in dieser Familie anlegen">als Fahrzeug</button>` : ""}<button type="button" class="btn klein primary" data-act="kbUebernehmen" data-c="${esc(a.code)}">Übernehmen</button></span>` : ""}</li>`; }).join("")}</ul>`
+          : `<p class="kb-ac-leer klein">Kein Artikel gefunden.</p>`) : ""}
+      </div>
+      <p class="klein ${ziel ? "" : "gefahr-text"}">${zielText}</p>
+      ${q.trim() && ziel && neu.length > 1 ? `<button type="button" class="btn klein" data-act="kbAlleUebernehmen">Alle ${neu.length} neuen Treffer übernehmen</button>` : ""}
+      ${!q.trim() ? `<p class="klein gedimmt">Tippen, dann mit <b>Übernehmen</b>, <kbd>Enter</kbd> oder per Ziehen in den Katalog. <kbd>↑</kbd> <kbd>↓</kbd> wählen den Vorschlag.${istFz ? " Ziehen auf eine Gruppe legt den Code dort ab." : ""}</p>` : ""}
+      ${quellZeile()}</aside>`;
+  }
+
 
   /* ---------- Aktionen ---------- */
   const A = K.act, I = K.inp;
-  A.kbWahl = el => { K.kb.sel = el.dataset.s; K.kb.loeschen = null; K.kb.codeSuche = ""; K.render(); };
+  A.kbWahl = el => { const kb = K.kb; kb.sel = el.dataset.s; kb.pos = el.dataset.pos || null; kb.ziel = kb.pos || ""; kb.loeschen = null; kb.codeSuche = ""; if (kb.pos) kb.offen[kb.sel] = true; K.render(); K.nach(v => v.querySelector(".kb-mitte")?.scrollIntoView({ block: "nearest" })); };
+  A.kbZuRegeln = el => { K.st.kontext = "p:" + el.dataset.p; K.st.regelTab = "tabellen"; K.gehe("studio-regeln"); };
+  A.kbRestLoeschen = async el => { const ids = el.dataset.p ? [el.dataset.p] : K.nurImKatalog().map(p => p.id); K.sheetZu(); const lv = S().live || { produkte: [] }, namen = ids.map(id => (lv.produkte.find(x => x.id === id) || E.produkt(ent(), id) || { name: id }).name); await K.Store.endgueltigLoeschen({ produkte: ids }, ids.length === 1 ? `Fahrzeug ${namen[0]} gelöscht` : `${ids.length} Fahrzeuge gelöscht: ${namen.join(", ")}`); K.toast(`${ids.length === 1 ? "Fahrzeug" : ids.length + " Fahrzeuge"} gelöscht. Zurückholen über Studio › Protokoll.`); K.render(); };
+  A.kbAufP = el => { const k = "p:" + el.dataset.p, kb = K.kb; kb.offen[k] = !(kb.offen[k] ?? (kb.sel === k)); K.render(); };
+  A.kbPosZurueck = () => { K.kb.pos = null; K.kb.ziel = ""; K.render(); };
+  A.kbRegelNeu = el => {
+    const mo = ent(), pid = K.kb.sel.slice(2), mid = el.dataset.m, id = E.neueId("R", mo.regeln.map(r => r.id)), alsDann = el.dataset.rolle !== "wenn";
+    mo.regeln.push({ id, name: "", aktiv: true, produkte: [pid], gruppen: [], wenn: [{ merkmal: alsDann ? "" : mid, op: "ist", werte: [] }], dann: { typ: "sperren", merkmal: alsDann ? mid : "", werte: [] }, hinweis: "" });
+    K.st.kontext = "p:" + pid; K.st.regelOffen = id; geaendert(`Regel ${id} für ${E.merkmal(mo, mid)?.name} angelegt`);
+    K.nach(v => v.querySelector(".kb-posregeln .regelkarte.offen")?.scrollIntoView({ block: "center" }));
+  };
   A.kbAuf = el => { K.kb.offen[el.dataset.g] = !(K.kb.offen[el.dataset.g] ?? true); K.render(); };
   A.kbFamNeu = el => {
     const mo = ent(), eltern = el.dataset.g || null, g = { id: eindeutig("familie", mo.gruppen), name: "Neue Familie", eltern, merkmale: [] };
@@ -345,20 +413,19 @@
   I.kbPFeld = el => { const p = objekt(K.kb.sel), k = el.dataset.k; p[k] = k === "basispreis" ? (+el.value || 0) : el.value; if (k === "basispreis" && K.Store.artikelZu(p.code)) p.apStamm = false; geaendert(`${p.name}: ${k === "basispreis" ? "Grundpreis" : k === "name" ? "Name" : "Beschreibung"} geändert`); };
   A.kbPFam = el => { const p = objekt(K.kb.sel); p.gruppe = el.value; geaendert(`${p.name} nach ${gruppe(el.value)?.name} verschoben`); };
   A.kbPAktiv = el => { const p = objekt(K.kb.sel); p.aktiv = el.checked; geaendert(`${p.name} ${el.checked ? "im Katalog sichtbar" : "ausgeblendet"}`); };
-  A.kbLoeschen = () => {
-    const kb = K.kb, mo = ent(); if (kb.loeschen !== kb.sel) { kb.loeschen = kb.sel; return K.render(); }
-    const o = objekt(kb.sel);
-    if (kb.sel[0] === "g") {
-      for (const k of kinder(o.id)) k.eltern = o.eltern || null; for (const p of fahrzeuge(o.id)) p.gruppe = o.eltern || (mo.gruppen.find(x => x.id !== o.id)?.id || "");
-      E.ausGeltungEntfernen(mo, [o.id], []); mo.gruppen = mo.gruppen.filter(g => g !== o);
-      geaendert(`Familie ${o.name} gelöscht, Inhalt eine Ebene höher`);
-    } else { E.ausGeltungEntfernen(mo, [], [o.id]); mo.produkte = mo.produkte.filter(p => p !== o); geaendert(`Fahrzeug ${o.name} gelöscht`); }
-    kb.sel = o.eltern ? "g:" + o.eltern : o.gruppe ? "g:" + o.gruppe : ""; kb.loeschen = null; K.render();
+  A.kbKachelLoeschen = el => { K.kb.kachelLoeschen = el.dataset.p || null; K.render(); };
+  A.kbKachelLoeschenOk = async el => { const p = E.produkt(ent(), el.dataset.p); K.kb.kachelLoeschen = null; if (!p) return K.render(); if (K.kb.sel === "p:" + p.id) K.kb.sel = ""; await K.Store.endgueltigLoeschen({ produkte: [p.id] }, `Fahrzeug ${p.name} (${p.code || p.id}) gelöscht`); K.toast(`${p.name} gelöscht. Zurückholen über Studio › Protokoll.`); K.render(); };
+  A.kbLoeschen = async () => {
+    const kb = K.kb; if (kb.loeschen !== kb.sel) { kb.loeschen = kb.sel; return K.render(); }
+    const o = objekt(kb.sel), fam = kb.sel[0] === "g"; kb.loeschen = null; kb.sel = ""; kb.pos = null; if (!o) return K.render();
+    if (fam) { const n = E.familienArtikel(ent(), o.id).length; await K.Store.endgueltigLoeschen({ gruppen: [o.id] }, `Familie ${o.name} mit ${n} Fahrzeug${n === 1 ? "" : "en"} gelöscht`); K.toast(`${o.name} gelöscht. Zurückholen über Studio › Protokoll.`); }
+    else { await K.Store.endgueltigLoeschen({ produkte: [o.id] }, `Fahrzeug ${o.name} (${o.code || o.id}) gelöscht`); K.toast(`${o.name} gelöscht. Zurückholen über Studio › Protokoll.`); }
+    K.render();
   };
   A.kbLeeren = () => {
     const kb = K.kb; if (!kb.leeren) { kb.leeren = true; K.render(); setTimeout(() => { kb.leeren = false; }, 6000); return; }
-    const mo = ent(); Object.assign(mo, { gruppen: [], produkte: [], merkmale: [], regeln: [] }); kb.leeren = false; kb.sel = "";
-    geaendert("Entwurf geleert, Katalog wird neu aufgebaut");
+    kb.leeren = false; kb.sel = ""; kb.pos = null;
+    K.Store.endgueltigLoeschen({ alles: true }, "Katalog komplett geleert (Neu beginnen)").then(() => { K.toast("Katalog geleert. Zurückholen über Studio › Protokoll."); K.render(); });
   };
   A.kbVorschau = () => { K.kat.entwurf = true; K.kat.gruppe = K.kb.sel[0] === "g" ? K.kb.sel.slice(2) : ""; K.gehe("katalog"); };
   // Codes und Gruppen am Fahrzeug
@@ -417,14 +484,36 @@
     geaendert(`Überschrift „${neu}“`); };
   A.kbGaWeg = el => { const p = objekt(K.kb.sel); p.grundausstattung.splice(+el.dataset.i, 1); geaendert(`Grundausstattung von ${p.name} geändert`); };
   function meldung(p, r) {
-    geaendert(`${r.neu} neue Codes bei ${p.name}`);
-    const t = [r.neu ? `${r.neu} neue Codes` : "", r.schon ? `${r.schon} waren schon da` : "", r.anders ? `${r.anders} stehen bereits in einer anderen Gruppe und bleiben dort` : ""].filter(Boolean).join(", ");
+    geaendert(`${r.neu === 1 ? "1 neuer Code" : r.neu + " neue Codes"} bei ${p.name}`);
+    const t = [r.neu ? (r.neu === 1 ? "1 neuer Code" : `${r.neu} neue Codes`) : "", r.schon ? `${r.schon} waren schon da` : "", r.anders ? `${r.anders} stehen bereits in einer anderen Gruppe und bleiben dort` : ""].filter(Boolean).join(", ");
     K.toast(t || "Codes hinzugefügt");
     if (r.neuGruppe) K.nach(v => { const f = v.querySelector("#kb-mn-" + r.neuGruppe.id); if (f) { f.focus(); f.select(); } });
   }
   // Baukasten
   A.kbPoolTab = el => { K.kb.poolTab = el.dataset.t; K.kb.poolWahl.clear(); K.render(); };
-  I.kbPSuche = el => { K.kb.poolSuche = el.value; K.render(); K.nach(v => { const f = v.querySelector("#kb-psuche"); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); } }); };
+  const sucheFokus = () => K.nach(v => { const f = v.querySelector("#kb-psuche"); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); v.querySelector('.kb-ac-liste [aria-selected="true"]')?.scrollIntoView({ block: "nearest" }); } });
+  I.kbPSuche = el => { K.kb.poolSuche = el.value; K.kb.acIdx = 0; K.render(); sucheFokus(); };
+  /** Codes an das gewählte Fahrzeug bzw. die Familie hängen, danach Suchfeld leeren für den nächsten Code */
+  const uebernehmen = codes => {
+    const o = objekt(K.kb.sel), t = K.kb.sel[0]; if (!o || ro() || !codes.length) return;
+    K.kb.poolSuche = ""; K.kb.acIdx = 0;
+    if (t === "p") mitOrdnen(o, codes, codesZuFahrzeug(o, codes, K.kb.ziel));
+    else if (t === "g") { o.merkmale ||= []; const r = codesZuFahrzeug(o, codes, K.kb.ziel); geaendert(`${codes.length} Codes an Familie ${o.name}`); K.toast(`${codes.length === 1 ? codes[0] + " gilt" : codes.length + " Codes gelten"} jetzt für alle Fahrzeuge in ${o.name}${r.schon ? ` (${r.schon} waren schon da)` : ""}`); }
+    else return;
+    K.render(); sucheFokus();
+  };
+  A.geheAbfragen = () => K.gehe("studio-einstellungen");
+  A.kbUebernehmen = (el, e) => { e?.stopPropagation?.(); uebernehmen([el.dataset.c]); };
+  A.kbAlleUebernehmen = () => { const mo = ent(), o = objekt(K.kb.sel), da = new Set(); if (K.kb.sel[0] === "p") for (const x of E.produktMerkmale(mo, o)) for (const w of x.werte) if (w.code) da.add(norm(w.code)); uebernehmen(treffer(mo, K.kb.poolSuche).map(a => a.code).filter(c => !da.has(norm(c)))); };
+  A.kbAlsFz = (el, e) => { e?.stopPropagation?.(); const g = objekt(K.kb.sel); if (!g) return; const r = fahrzeugeAnlegen(g.id, [el.dataset.c]); K.kb.poolSuche = ""; geaendert(`${el.dataset.c} als Fahrzeug in ${g.name}`); K.toast(r.neu ? `${el.dataset.c} als Fahrzeug angelegt` : r.verschoben ? `${el.dataset.c} hierher verschoben` : `${el.dataset.c} ist schon ein Fahrzeug`); sucheFokus(); };
+  A.kbAcZeile = (el, e) => { if (e?.target?.closest?.("button")) return; K.kb.acIdx = +el.dataset.i; K.render(); sucheFokus(); };
+  document.addEventListener("keydown", e => {
+    const f = e.target; if (!f || f.id !== "kb-psuche" || !K.root || !K.root.contains(f)) return;
+    const n = K.root.querySelectorAll(".kb-ac-liste [role=option]").length, kb = K.kb;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { if (!n) return; e.preventDefault(); kb.acIdx = ((kb.acIdx || 0) + (e.key === "ArrowDown" ? 1 : -1) + n) % n; K.render(); sucheFokus(); }
+    else if (e.key === "Enter") { e.preventDefault(); const li = K.root.querySelector(`#kb-ac-${kb.acIdx || 0}`), b = li?.querySelector("[data-act=kbUebernehmen]"); if (b) uebernehmen([b.dataset.c]); else if (li) K.toast(objekt(kb.sel) ? "Dieser Code ist schon drin." : "Links ein Fahrzeug oder eine Familie wählen."); }
+    else if (e.key === "Escape" && kb.poolSuche) { e.preventDefault(); kb.poolSuche = ""; kb.acIdx = 0; K.render(); sucheFokus(); }
+  });
   A.kbPoolWahl = el => { const s = K.kb.poolWahl; el.checked ? s.add(el.dataset.c) : s.delete(el.dataset.c); K.render(); };
   A.kbPoolLeer = () => { K.kb.poolWahl.clear(); K.render(); };
   A.kbPoolAlle = () => { K.root.querySelectorAll(".kb-poolliste input[data-c]").forEach(i => K.kb.poolWahl.add(i.dataset.c)); K.render(); };
