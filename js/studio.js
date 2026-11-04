@@ -859,7 +859,7 @@
         <p class="klein gedimmt">Für den Betrieb in APplus wird die Datenschicht (store.js) gegen Ihre Queries und Tabellen getauscht. Die Struktur steht in daten/demo.json.</p></section>`;
   });
   /* Angebotsnummern: eigener Nummernkreis oder aus APplus */
-  const ABFRAGEN = [["artikel", "Artikelstamm (Codes)", "ARTIKEL, NAME; optional VKPREIS, HERSTELLKOSTEN, ME"], ["kunden", "Kunden", "KUNDENNR, FIRMA, STRASSE, PLZ, ORT …"], ["vertrieb", "Vertrieb (Bearbeiter)", "PERSONAL, NAME, TELEFON, EMAIL"]];
+  const ABFRAGEN = [["artikel", "Artikelstamm (Codes)", "ARTIKEL, NAME; optional NETTO bzw. VKPREIS, HERSTELLKOSTEN, ME"], ["kunden", "Kunden", "KUNDENNR, FIRMA, STRASSE, PLZ, ORT …"], ["vertrieb", "Vertrieb (Bearbeiter)", "PERSONAL, NAME, TELEFON, EMAIL"]];
   function abfragenPanel(e) {
     const qs = K.Store.abfragen(), st = K.Store.abfrageStatus || {}, cfg = (K.cfg && K.cfg.queries) || {};
     return `<section class="panel"><h3>APplus-Abfragen</h3><p class="klein gedimmt">Name der Abfrage, die dem Dashboard zugeordnet ist (wie in APplus angelegt). Der Eintrag hier gilt für diesen Browser und hat Vorrang vor <code>KONF_CONFIG</code>.</p>
