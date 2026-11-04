@@ -278,6 +278,53 @@
       await this.log("Freigabe", "Entwurf verworfen, Stand der Version " + this.S.live.version + " wiederhergestellt");
       this._melde("entwurf");
     },
+    /**
+     * Fahrzeuge und Familien endgültig löschen: aus dem Entwurf UND dem freigegebenen Katalog.
+     * Eine Kopie steht im Protokoll und lässt sich dort zurückholen.
+     * auswahl = { produkte: [ids], gruppen: [ids], alles: bool }
+     */
+    async endgueltigLoeschen(auswahl, text) {
+      const S = this.S, E = K.E, modelle = [S.entwurf, S.live].filter((m, i, a) => m && a.indexOf(m) === i);
+      const snap = { produkte: [], gruppen: [], merkmale: [], regeln: [] }, hat = { p: new Set(), g: new Set(), m: new Set(), r: new Set() };
+      const merke = (art, liste, o) => { if (o && !hat[art].has(o.id)) { hat[art].add(o.id); liste.push(clone(o)); } };
+      for (const mo of modelle) {
+        const gids = new Set(auswahl.alles ? mo.gruppen.map(g => g.id) : []);
+        for (const g of auswahl.gruppen || []) { gids.add(g); let neu = true; while (neu) { neu = false; for (const x of mo.gruppen) if (x.eltern && gids.has(x.eltern) && !gids.has(x.id)) { gids.add(x.id); neu = true; } } }
+        const pids = new Set([...(auswahl.produkte || []), ...mo.produkte.filter(p => auswahl.alles || gids.has(p.gruppe)).map(p => p.id)]);
+        for (const g of mo.gruppen) if (gids.has(g.id)) merke("g", snap.gruppen, g);
+        for (const p of mo.produkte) if (pids.has(p.id)) merke("p", snap.produkte, p);
+        const zu = [...mo.produkte.filter(p => pids.has(p.id)).flatMap(p => p.merkmale || []), ...mo.gruppen.filter(g => gids.has(g.id)).flatMap(g => g.merkmale || [])];
+        for (const z of zu) merke("m", snap.merkmale, E.merkmal(mo, z.id));
+        for (const r of mo.regeln) if (auswahl.alles || (r.produkte || []).some(x => pids.has(x)) || (r.gruppen || []).some(x => gids.has(x))) merke("r", snap.regeln, r);
+        E.ausGeltungEntfernen(mo, [...gids], [...pids]);
+        mo.produkte = mo.produkte.filter(p => !pids.has(p.id)); mo.gruppen = mo.gruppen.filter(g => !gids.has(g.id));
+        if (auswahl.alles) { for (const m of mo.merkmale) merke("m", snap.merkmale, m); for (const r of mo.regeln) merke("r", snap.regeln, r); mo.merkmale = []; mo.regeln = []; }
+      }
+      clearTimeout(this._entwurfTimer); await this._entwurfSichern();
+      if (S.live && S.live !== S.entwurf) await this._set("modell/live", clone(S.live)).catch(() => {});
+      await this.log("Gelöscht", text || `${snap.produkte.length} Fahrzeuge, ${snap.gruppen.length} Familien gelöscht`, { art: "geloescht", ...snap });
+      this._melde("live"); this._melde("entwurf");
+      return snap;
+    },
+    /** Gelöschtes aus einem Protokolleintrag wieder in Entwurf und Katalog einfügen (Vorhandenes bleibt unverändert) */
+    async wiederherstellen(ts) {
+      const S = this.S, e = S.protokoll.flatMap(p => p.eintraege).find(x => x.ts === ts && x.daten && x.daten.art === "geloescht"); if (!e) return 0;
+      const d = e.daten, modelle = [S.entwurf, S.live].filter((m, i, a) => m && a.indexOf(m) === i); let n = 0;
+      for (const mo of modelle) {
+        const gIds = new Set(mo.gruppen.map(g => g.id));
+        const offen = d.gruppen.filter(g => !gIds.has(g.id));
+        while (offen.length) { const i = offen.findIndex(g => !g.eltern || gIds.has(g.eltern) || !offen.some(x => x.id === g.eltern)); const g = clone(offen.splice(i < 0 ? 0 : i, 1)[0]); if (g.eltern && !gIds.has(g.eltern) && !d.gruppen.some(x => x.id === g.eltern)) g.eltern = null; mo.gruppen.push(g); gIds.add(g.id); }
+        for (const m of d.merkmale) { const da = mo.merkmale.find(x => x.id === m.id); if (!da) mo.merkmale.push(clone(m)); else for (const w of m.werte || []) if (!da.werte.some(v => v.id === w.id)) da.werte.push(clone(w)); }
+        for (const p of d.produkte) if (!mo.produkte.some(x => x.id === p.id)) { mo.produkte.push(clone(p)); if (mo === S.entwurf) n++; }
+        for (const r of d.regeln) { const da = mo.regeln.find(x => x.id === r.id); if (!da) mo.regeln.push(clone(r)); else { for (const x of r.produkte || []) if (!(da.produkte || []).includes(x) && (da.produkte || []).length) da.produkte.push(x); } }
+      }
+      e.wiederhergestellt = Date.now(); const doc = S.protokoll.find(p => p.eintraege.includes(e)); if (doc) await this._set("protokoll/" + doc.monat, clone(doc)).catch(() => {});
+      clearTimeout(this._entwurfTimer); await this._entwurfSichern();
+      if (S.live && S.live !== S.entwurf) await this._set("modell/live", clone(S.live)).catch(() => {});
+      await this.log("Gelöscht", `Zurückgeholt: ${e.text}`);
+      this._melde("live"); this._melde("entwurf");
+      return n || d.produkte.length;
+    },
     async alteVersionLaden(v) {
       // Nur der aktuelle Live-Stand ist komplett gespeichert; ältere Releases sind Protokolleinträge.
     },
@@ -389,12 +436,12 @@
       clearTimeout(this._merkTimer);
       this._merkTimer = setTimeout(() => { const l = Object.values(this._merk); this._merk = {}; this.log(l.map(x => x.bereich), l.map(x => x.text)); }, 4000);
     },
-    async log(bereich, text) {
+    async log(bereich, text, daten) {
       const bs = [].concat(bereich), ts = [].concat(text);
       const monat = new Date().toISOString().slice(0, 7), S = this.S;
       let doc = S.protokoll.find(p => p.monat === monat);
       if (!doc) { doc = { monat, eintraege: [] }; S.protokoll.unshift(doc); }
-      ts.forEach((t, i) => doc.eintraege.push({ ts: Date.now(), von: this.uid, bereich: bs[i] || bs[0], text: t }));
+      ts.forEach((t, i) => doc.eintraege.push(Object.assign({ ts: Date.now() + i, von: this.uid, bereich: bs[i] || bs[0], text: t }, daten && i === 0 ? { daten: clone(daten) } : {})));
       if (doc.eintraege.length > 800) doc.eintraege = doc.eintraege.slice(-800);
       this._melde("protokoll");
       await this._set("protokoll/" + monat, clone(doc)).catch(() => {});

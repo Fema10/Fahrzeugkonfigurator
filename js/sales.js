@@ -111,8 +111,8 @@
       <div class="kachel-text">
         <div class="kachel-titel"><b>${esc(p.name)}</b><span class="info" title="${esc(p.beschreibung)}" tabindex="0" aria-label="${esc(p.beschreibung)}">i</span>
           <button type="button" class="stern" data-act="favorit" data-p="${p.id}" aria-pressed="${fav}" title="${fav ? "Aus Favoriten entfernen" : "Zu Favoriten"}">${fav ? "★" : "☆"}</button></div>
-        <span class="mono klein gedimmt">${esc(p.code || p.artnr || "")}</span>${!K.kat.entwurf && K.Store.schreiben && S().entwurf && !S().entwurf.produkte.some(x => x.id === p.id) ? `<span class="kachel-weg" title="Im Katalog aufbauen gelöscht, verschwindet mit der nächsten Freigabe">im Entwurf gelöscht</span>` : ""}
-        <div class="kachel-fuss"><span class="num">ab ${K.eur(mo ? abPreis(mo, p) : p.basispreis)}</span><span class="row kachel-knoepfe">${K.Store.schreiben ? `<button type="button" class="zahnrad" data-act="kbBearbeiten" data-p="${p.id}" title="Im Katalog aufbauen bearbeiten oder löschen" aria-label="${esc(p.name)} bearbeiten">✎</button>` : ""}<button type="button" class="zahnrad" data-act="konfigStart" data-p="${p.id}" title="Konfigurieren" aria-label="Konfigurieren">⚙</button></span></div>
+        <span class="mono klein gedimmt">${esc(p.code || p.artnr || "")}</span>
+        <div class="kachel-fuss"><span class="num">ab ${K.eur(mo ? abPreis(mo, p) : p.basispreis)}</span><span class="row kachel-knoepfe">${K.Store.schreiben && !K.kat.entwurf ? `<button type="button" class="zahnrad" data-act="kbBearbeiten" data-p="${p.id}" title="Im Katalog aufbauen bearbeiten" aria-label="${esc(p.name)} bearbeiten">✎</button><button type="button" class="zahnrad loeschen" data-act="katLoeschen" data-p="${p.id}" title="Löschen" aria-label="${esc(p.name)} löschen">🗑</button>` : ""}<button type="button" class="zahnrad" data-act="konfigStart" data-p="${p.id}" title="Konfigurieren" aria-label="Konfigurieren">⚙</button></span></div>
       </div></article>`;
   }
   function baum(mo, gid, tiefe) {
@@ -160,9 +160,13 @@
   });
   /** Fahrzeug im Studio › Katalog aufbauen öffnen (ändern, Codes, löschen) */
   K.act.kbBearbeiten = el => { const pid = el.dataset.p, mo = S().entwurf; if (!mo) return;
-    if (!mo.produkte.some(x => x.id === pid)) { const lp = S().live?.produkte.find(x => x.id === pid); return K.sheet(`<h3>${esc(lp?.name || "Fahrzeug")} ist im Entwurf gelöscht</h3><p>Im Studio wurde dieses Fahrzeug entfernt (z. B. mit „Neu beginnen“). Der Vertrieb sieht es noch, bis Sie freigeben. Danach verschwindet es aus dem Katalog.</p>
-      <div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-act="sheetZu">Abbrechen</button><button class="btn" type="button" data-act="katZurFreigabe">Zur Freigabe (endgültig entfernen)</button><button class="btn primary" type="button" data-act="kbHolenUndBearbeiten" data-p="${pid}">Zurückholen und bearbeiten</button></div>`); } K.kat.entwurf = false; K.konf.entwurf = false; K.kb.sel = "p:" + pid; K.kb.loeschen = null; K.gehe("studio-katalog"); };
-  K.act.kbHolenUndBearbeiten = el => { K.sheetZu(); const pid = el.dataset.p; if (!K.kbZurueckholen(pid)) return K.toast("Fahrzeug nicht gefunden."); K.Store.entwurfGeaendert(`${E.produkt(S().entwurf, pid)?.name} aus der freigegebenen Version zurückgeholt`); K.kat.entwurf = false; K.kb.sel = "p:" + pid; K.kb.pos = null; K.gehe("studio-katalog"); };
+    if (!mo.produkte.some(x => x.id === pid)) { const lp = S().live?.produkte.find(x => x.id === pid);
+      return K.sheet(`<h3>${esc(lp?.name || "Fahrzeug")} löschen?</h3><p>Dieses Fahrzeug ist im Katalog aufbauen schon entfernt und steht nur noch hier im Katalog.</p>
+        <div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-act="sheetZu">Abbrechen</button><button class="btn gefahr" type="button" data-act="kbRestLoeschen" data-p="${esc(pid)}">Auch aus dem Katalog löschen</button></div><p class="klein gedimmt">Zurückholen danach über Studio › Protokoll.</p>`); }
+    K.kat.entwurf = false; K.konf.entwurf = false; K.kb.sel = "p:" + pid; K.kb.pos = null; K.kb.loeschen = null; K.gehe("studio-katalog"); };
+  /** Fahrzeug direkt aus dem Katalog löschen (Entwurf und Katalog, Kopie im Protokoll) */
+  K.act.katLoeschen = el => { const p = (S().live?.produkte || []).find(x => x.id === el.dataset.p) || E.produkt(S().entwurf, el.dataset.p); if (!p) return;
+    K.sheet(`<h3>${esc(p.name)} löschen?</h3><p>Das Fahrzeug wird aus dem Katalog und aus Katalog aufbauen entfernt. Bestehende Angebote behalten ihre Positionen.</p><div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-act="sheetZu">Abbrechen</button><button class="btn gefahr" type="button" data-act="kbRestLoeschen" data-p="${esc(p.id)}">Löschen</button></div><p class="klein gedimmt">Zurückholen über Studio › Protokoll.</p>`); };
   K.act.konfAnsicht = () => { K.konf.zeige3d = !K.konf.zeige3d; K.render(); };
   K.act.katEntwurfZeigen = () => { K.kat.entwurf = true; K.render(); };
   K.act.katZurFreigabe = () => { K.sheetZu && K.sheetZu(); K.gehe("studio-freigabe"); };

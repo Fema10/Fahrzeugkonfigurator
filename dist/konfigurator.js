@@ -4167,6 +4167,53 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
       await this.log("Freigabe", "Entwurf verworfen, Stand der Version " + this.S.live.version + " wiederhergestellt");
       this._melde("entwurf");
     },
+    /**
+     * Fahrzeuge und Familien endgültig löschen: aus dem Entwurf UND dem freigegebenen Katalog.
+     * Eine Kopie steht im Protokoll und lässt sich dort zurückholen.
+     * auswahl = { produkte: [ids], gruppen: [ids], alles: bool }
+     */
+    async endgueltigLoeschen(auswahl, text) {
+      const S = this.S, E = K.E, modelle = [S.entwurf, S.live].filter((m, i, a) => m && a.indexOf(m) === i);
+      const snap = { produkte: [], gruppen: [], merkmale: [], regeln: [] }, hat = { p: new Set(), g: new Set(), m: new Set(), r: new Set() };
+      const merke = (art, liste, o) => { if (o && !hat[art].has(o.id)) { hat[art].add(o.id); liste.push(clone(o)); } };
+      for (const mo of modelle) {
+        const gids = new Set(auswahl.alles ? mo.gruppen.map(g => g.id) : []);
+        for (const g of auswahl.gruppen || []) { gids.add(g); let neu = true; while (neu) { neu = false; for (const x of mo.gruppen) if (x.eltern && gids.has(x.eltern) && !gids.has(x.id)) { gids.add(x.id); neu = true; } } }
+        const pids = new Set([...(auswahl.produkte || []), ...mo.produkte.filter(p => auswahl.alles || gids.has(p.gruppe)).map(p => p.id)]);
+        for (const g of mo.gruppen) if (gids.has(g.id)) merke("g", snap.gruppen, g);
+        for (const p of mo.produkte) if (pids.has(p.id)) merke("p", snap.produkte, p);
+        const zu = [...mo.produkte.filter(p => pids.has(p.id)).flatMap(p => p.merkmale || []), ...mo.gruppen.filter(g => gids.has(g.id)).flatMap(g => g.merkmale || [])];
+        for (const z of zu) merke("m", snap.merkmale, E.merkmal(mo, z.id));
+        for (const r of mo.regeln) if (auswahl.alles || (r.produkte || []).some(x => pids.has(x)) || (r.gruppen || []).some(x => gids.has(x))) merke("r", snap.regeln, r);
+        E.ausGeltungEntfernen(mo, [...gids], [...pids]);
+        mo.produkte = mo.produkte.filter(p => !pids.has(p.id)); mo.gruppen = mo.gruppen.filter(g => !gids.has(g.id));
+        if (auswahl.alles) { for (const m of mo.merkmale) merke("m", snap.merkmale, m); for (const r of mo.regeln) merke("r", snap.regeln, r); mo.merkmale = []; mo.regeln = []; }
+      }
+      clearTimeout(this._entwurfTimer); await this._entwurfSichern();
+      if (S.live && S.live !== S.entwurf) await this._set("modell/live", clone(S.live)).catch(() => {});
+      await this.log("Gelöscht", text || `${snap.produkte.length} Fahrzeuge, ${snap.gruppen.length} Familien gelöscht`, { art: "geloescht", ...snap });
+      this._melde("live"); this._melde("entwurf");
+      return snap;
+    },
+    /** Gelöschtes aus einem Protokolleintrag wieder in Entwurf und Katalog einfügen (Vorhandenes bleibt unverändert) */
+    async wiederherstellen(ts) {
+      const S = this.S, e = S.protokoll.flatMap(p => p.eintraege).find(x => x.ts === ts && x.daten && x.daten.art === "geloescht"); if (!e) return 0;
+      const d = e.daten, modelle = [S.entwurf, S.live].filter((m, i, a) => m && a.indexOf(m) === i); let n = 0;
+      for (const mo of modelle) {
+        const gIds = new Set(mo.gruppen.map(g => g.id));
+        const offen = d.gruppen.filter(g => !gIds.has(g.id));
+        while (offen.length) { const i = offen.findIndex(g => !g.eltern || gIds.has(g.eltern) || !offen.some(x => x.id === g.eltern)); const g = clone(offen.splice(i < 0 ? 0 : i, 1)[0]); if (g.eltern && !gIds.has(g.eltern) && !d.gruppen.some(x => x.id === g.eltern)) g.eltern = null; mo.gruppen.push(g); gIds.add(g.id); }
+        for (const m of d.merkmale) { const da = mo.merkmale.find(x => x.id === m.id); if (!da) mo.merkmale.push(clone(m)); else for (const w of m.werte || []) if (!da.werte.some(v => v.id === w.id)) da.werte.push(clone(w)); }
+        for (const p of d.produkte) if (!mo.produkte.some(x => x.id === p.id)) { mo.produkte.push(clone(p)); if (mo === S.entwurf) n++; }
+        for (const r of d.regeln) { const da = mo.regeln.find(x => x.id === r.id); if (!da) mo.regeln.push(clone(r)); else { for (const x of r.produkte || []) if (!(da.produkte || []).includes(x) && (da.produkte || []).length) da.produkte.push(x); } }
+      }
+      e.wiederhergestellt = Date.now(); const doc = S.protokoll.find(p => p.eintraege.includes(e)); if (doc) await this._set("protokoll/" + doc.monat, clone(doc)).catch(() => {});
+      clearTimeout(this._entwurfTimer); await this._entwurfSichern();
+      if (S.live && S.live !== S.entwurf) await this._set("modell/live", clone(S.live)).catch(() => {});
+      await this.log("Gelöscht", `Zurückgeholt: ${e.text}`);
+      this._melde("live"); this._melde("entwurf");
+      return n || d.produkte.length;
+    },
     async alteVersionLaden(v) {
       // Nur der aktuelle Live-Stand ist komplett gespeichert; ältere Releases sind Protokolleinträge.
     },
@@ -4278,12 +4325,12 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
       clearTimeout(this._merkTimer);
       this._merkTimer = setTimeout(() => { const l = Object.values(this._merk); this._merk = {}; this.log(l.map(x => x.bereich), l.map(x => x.text)); }, 4000);
     },
-    async log(bereich, text) {
+    async log(bereich, text, daten) {
       const bs = [].concat(bereich), ts = [].concat(text);
       const monat = new Date().toISOString().slice(0, 7), S = this.S;
       let doc = S.protokoll.find(p => p.monat === monat);
       if (!doc) { doc = { monat, eintraege: [] }; S.protokoll.unshift(doc); }
-      ts.forEach((t, i) => doc.eintraege.push({ ts: Date.now(), von: this.uid, bereich: bs[i] || bs[0], text: t }));
+      ts.forEach((t, i) => doc.eintraege.push(Object.assign({ ts: Date.now() + i, von: this.uid, bereich: bs[i] || bs[0], text: t }, daten && i === 0 ? { daten: clone(daten) } : {})));
       if (doc.eintraege.length > 800) doc.eintraege = doc.eintraege.slice(-800);
       this._melde("protokoll");
       await this._set("protokoll/" + monat, clone(doc)).catch(() => {});
@@ -4838,8 +4885,8 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
       <div class="kachel-text">
         <div class="kachel-titel"><b>${esc(p.name)}</b><span class="info" title="${esc(p.beschreibung)}" tabindex="0" aria-label="${esc(p.beschreibung)}">i</span>
           <button type="button" class="stern" data-act="favorit" data-p="${p.id}" aria-pressed="${fav}" title="${fav ? "Aus Favoriten entfernen" : "Zu Favoriten"}">${fav ? "★" : "☆"}</button></div>
-        <span class="mono klein gedimmt">${esc(p.code || p.artnr || "")}</span>${!K.kat.entwurf && K.Store.schreiben && S().entwurf && !S().entwurf.produkte.some(x => x.id === p.id) ? `<span class="kachel-weg" title="Im Katalog aufbauen gelöscht, verschwindet mit der nächsten Freigabe">im Entwurf gelöscht</span>` : ""}
-        <div class="kachel-fuss"><span class="num">ab ${K.eur(mo ? abPreis(mo, p) : p.basispreis)}</span><span class="row kachel-knoepfe">${K.Store.schreiben ? `<button type="button" class="zahnrad" data-act="kbBearbeiten" data-p="${p.id}" title="Im Katalog aufbauen bearbeiten oder löschen" aria-label="${esc(p.name)} bearbeiten">✎</button>` : ""}<button type="button" class="zahnrad" data-act="konfigStart" data-p="${p.id}" title="Konfigurieren" aria-label="Konfigurieren">⚙</button></span></div>
+        <span class="mono klein gedimmt">${esc(p.code || p.artnr || "")}</span>
+        <div class="kachel-fuss"><span class="num">ab ${K.eur(mo ? abPreis(mo, p) : p.basispreis)}</span><span class="row kachel-knoepfe">${K.Store.schreiben && !K.kat.entwurf ? `<button type="button" class="zahnrad" data-act="kbBearbeiten" data-p="${p.id}" title="Im Katalog aufbauen bearbeiten" aria-label="${esc(p.name)} bearbeiten">✎</button><button type="button" class="zahnrad loeschen" data-act="katLoeschen" data-p="${p.id}" title="Löschen" aria-label="${esc(p.name)} löschen">🗑</button>` : ""}<button type="button" class="zahnrad" data-act="konfigStart" data-p="${p.id}" title="Konfigurieren" aria-label="Konfigurieren">⚙</button></span></div>
       </div></article>`;
   }
   function baum(mo, gid, tiefe) {
@@ -4887,9 +4934,13 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
   });
   /** Fahrzeug im Studio › Katalog aufbauen öffnen (ändern, Codes, löschen) */
   K.act.kbBearbeiten = el => { const pid = el.dataset.p, mo = S().entwurf; if (!mo) return;
-    if (!mo.produkte.some(x => x.id === pid)) { const lp = S().live?.produkte.find(x => x.id === pid); return K.sheet(`<h3>${esc(lp?.name || "Fahrzeug")} ist im Entwurf gelöscht</h3><p>Im Studio wurde dieses Fahrzeug entfernt (z. B. mit „Neu beginnen“). Der Vertrieb sieht es noch, bis Sie freigeben. Danach verschwindet es aus dem Katalog.</p>
-      <div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-act="sheetZu">Abbrechen</button><button class="btn" type="button" data-act="katZurFreigabe">Zur Freigabe (endgültig entfernen)</button><button class="btn primary" type="button" data-act="kbHolenUndBearbeiten" data-p="${pid}">Zurückholen und bearbeiten</button></div>`); } K.kat.entwurf = false; K.konf.entwurf = false; K.kb.sel = "p:" + pid; K.kb.loeschen = null; K.gehe("studio-katalog"); };
-  K.act.kbHolenUndBearbeiten = el => { K.sheetZu(); const pid = el.dataset.p; if (!K.kbZurueckholen(pid)) return K.toast("Fahrzeug nicht gefunden."); K.Store.entwurfGeaendert(`${E.produkt(S().entwurf, pid)?.name} aus der freigegebenen Version zurückgeholt`); K.kat.entwurf = false; K.kb.sel = "p:" + pid; K.kb.pos = null; K.gehe("studio-katalog"); };
+    if (!mo.produkte.some(x => x.id === pid)) { const lp = S().live?.produkte.find(x => x.id === pid);
+      return K.sheet(`<h3>${esc(lp?.name || "Fahrzeug")} löschen?</h3><p>Dieses Fahrzeug ist im Katalog aufbauen schon entfernt und steht nur noch hier im Katalog.</p>
+        <div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-act="sheetZu">Abbrechen</button><button class="btn gefahr" type="button" data-act="kbRestLoeschen" data-p="${esc(pid)}">Auch aus dem Katalog löschen</button></div><p class="klein gedimmt">Zurückholen danach über Studio › Protokoll.</p>`); }
+    K.kat.entwurf = false; K.konf.entwurf = false; K.kb.sel = "p:" + pid; K.kb.pos = null; K.kb.loeschen = null; K.gehe("studio-katalog"); };
+  /** Fahrzeug direkt aus dem Katalog löschen (Entwurf und Katalog, Kopie im Protokoll) */
+  K.act.katLoeschen = el => { const p = (S().live?.produkte || []).find(x => x.id === el.dataset.p) || E.produkt(S().entwurf, el.dataset.p); if (!p) return;
+    K.sheet(`<h3>${esc(p.name)} löschen?</h3><p>Das Fahrzeug wird aus dem Katalog und aus Katalog aufbauen entfernt. Bestehende Angebote behalten ihre Positionen.</p><div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-act="sheetZu">Abbrechen</button><button class="btn gefahr" type="button" data-act="kbRestLoeschen" data-p="${esc(p.id)}">Löschen</button></div><p class="klein gedimmt">Zurückholen über Studio › Protokoll.</p>`); };
   K.act.konfAnsicht = () => { K.konf.zeige3d = !K.konf.zeige3d; K.render(); };
   K.act.katEntwurfZeigen = () => { K.kat.entwurf = true; K.render(); };
   K.act.katZurFreigabe = () => { K.sheetZu && K.sheetZu(); K.gehe("studio-freigabe"); };
@@ -5524,8 +5575,8 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     K.st.produkt = id; geaendert(`Produkt ${id} angelegt`);
   };
   K.act.pKopie = () => { const mo = ent(), p = K.clone(prod()); p.id = E.neueId("P", mo.produkte.map(x => x.id)); p.name += " (Kopie)"; p.aktiv = false; mo.produkte.push(p); K.st.produkt = p.id; geaendert(`Produkt ${p.name} angelegt`); };
-  K.act.pLoeschen = () => K.sheet(`<h3>${esc(prod().name)} löschen?</h3><p>Der Artikel wird aus dem Konfigurationsmodell entfernt (nicht aus APplus). Er verschwindet nach der nächsten Freigabe aus dem Katalog; bestehende Angebote behalten ihre Positionen. Regeln, die nur für diesen Artikel galten, werden mit gelöscht.</p><div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-act="sheetZu">Abbrechen</button><button class="btn gefahr" type="button" data-act="pLoeschenOk">Löschen</button></div>`);
-  K.act.pLoeschenOk = () => { const p = prod(), mo = ent(); mo.produkte = mo.produkte.filter(x => x.id !== p.id); const n = E.ausGeltungEntfernen(mo, [], [p.id]); K.sheetZu(); K.st.produkt = null; if (K.st.knoten === "p:" + p.id) K.st.knoten = p.gruppe ? "g:" + p.gruppe : ""; geaendert(`Artikel ${p.code || p.name} gelöscht${n ? `, ${n} Regeln nur für diesen Artikel entfernt` : ""}`); };
+  K.act.pLoeschen = () => K.sheet(`<h3>${esc(prod().name)} löschen?</h3><p>Das Fahrzeug wird aus dem Konfigurator und dem Katalog entfernt (nicht aus APplus). Bestehende Angebote behalten ihre Positionen. Regeln, die nur dafür galten, werden mit gelöscht. Zurückholen über Studio › Protokoll.</p><div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-act="sheetZu">Abbrechen</button><button class="btn gefahr" type="button" data-act="pLoeschenOk">Löschen</button></div>`);
+  K.act.pLoeschenOk = async () => { const p = prod(); K.sheetZu(); await K.Store.endgueltigLoeschen({ produkte: [p.id] }, `Fahrzeug ${p.name} (${p.code || p.id}) gelöscht`); K.st.produkt = ent().produkte[0]?.id || null; K.toast(`${p.name} gelöscht. Zurückholen über Studio › Protokoll.`); K.render(); };
   K.act.stTesten = el => K.konfigOeffnen(el.dataset.p, null, null, true);
   K.act.glbHochladen = async el => {
     const f = el.files[0]; if (!f) return;
@@ -6357,8 +6408,9 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     return kopf("Protokoll", "Wer hat wann was geändert. Die letzten drei Monate.") + `
       <div class="filterleiste"><div class="segment">${[["", "Alle"], ...bereiche.map(b => [b, b])].map(([id, n]) => `<button type="button" data-act="protBereich" data-b="${esc(id)}" aria-pressed="${K.prot.bereich === id}">${esc(n)}</button>`).join("")}</div></div>
       ${liste.length ? `<div class="tabwrap"><table><thead><tr><th>Zeit</th><th>Bereich</th><th>Änderung</th><th>Von</th></tr></thead><tbody>
-      ${liste.map(x => `<tr><td class="nowrap gedimmt">${K.zeit(x.ts)}</td><td><span class="chip">${esc(x.bereich)}</span></td><td>${esc(x.text)}</td><td class="gedimmt">${x.von ? esc(namen[x.von] || "Jemand") : "System"}</td></tr>`).join("")}</tbody></table></div>` : `<div class="leer">Noch keine Einträge.</div>`}`;
+      ${liste.map(x => `<tr><td class="nowrap gedimmt">${K.zeit(x.ts)}</td><td><span class="chip">${esc(x.bereich)}</span></td><td>${esc(x.text)}${x.daten && x.daten.art === "geloescht" ? (x.wiederhergestellt ? ` <span class="chip">zurückgeholt ${K.zeit(x.wiederhergestellt)}</span>` : ro() ? "" : ` <button type="button" class="btn klein" data-act="protZurueck" data-ts="${x.ts}" title="${esc([x.daten.produkte.length ? x.daten.produkte.length + " Fahrzeuge" : "", x.daten.gruppen.length ? x.daten.gruppen.length + " Familien" : "", x.daten.regeln.length ? x.daten.regeln.length + " Regeln" : ""].filter(Boolean).join(", "))}">Zurückholen</button>`) : ""}</td><td class="gedimmt">${x.von ? esc(namen[x.von] || "Jemand") : "System"}</td></tr>`).join("")}</tbody></table></div>` : `<div class="leer">Noch keine Einträge.</div>`}`;
   });
+  K.act.protZurueck = async el => { el.disabled = true; const n = await K.Store.wiederherstellen(+el.dataset.ts); K.toast(n ? `Zurückgeholt: im Katalog aufbauen und im Katalog wieder vorhanden` : "Nichts zurückzuholen"); K.render(); };
   K.act.protBereich = el => { K.prot.bereich = el.dataset.b; K.render(); };
   K.act.zuModell = el => { K.st.knoten = el.dataset.k; K.st.modellTab = "merkmale"; K.gehe("studio-modell"); };
   K.studio = { kontext, regelKarte, regelListe, matrixAnsicht, tabellenAnsicht, graph, stlTabelle, chipWahl, geaendert, bildFeld, bildHochladen, artKlasse, artTitel, gruppenOptionen, keinEntwurf, kopf, ro, dis, merkmalOptionen, gleicherScope,
@@ -8506,22 +8558,14 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
   const typIkon = m => ({ kacheln: "▦", liste: "☰", dropdown: "▾", mehrfach: "☑" })[E.gruppentyp(m)] || "•";
   /** Fahrzeuge, die der Vertrieb noch sieht (freigegebene Version), die im Entwurf aber fehlen */
   const nurLive = mo => { const lv = S().live; if (!lv || lv === mo) return []; const da = new Set(mo.produkte.map(p => p.id)); return (lv.produkte || []).filter(p => !da.has(p.id)); };
-  /** Fahrzeug aus der freigegebenen Version zurück in den Entwurf holen, mit fehlenden Familien und Positionen */
-  K.kbZurueckholen = pid => {
-    const mo = ent(), lv = S().live, p = lv && lv.produkte.find(x => x.id === pid); if (!mo || !p) return false;
-    const gHat = new Set(mo.gruppen.map(g => g.id)), mHat = new Set(mo.merkmale.map(m => m.id));
-    const kette = E.gruppenPfad(lv, p.gruppe);
-    for (const g of kette) if (!gHat.has(g.id)) { const kopie = K.clone(g); if (kopie.eltern && !gHat.has(kopie.eltern) && !kette.some(x => x.id === kopie.eltern)) kopie.eltern = null; mo.gruppen.push(kopie); gHat.add(g.id); }
-    for (const z of [...(p.merkmale || []), ...kette.flatMap(g => g.merkmale || [])]) if (!mHat.has(z.id)) { const m = lv.merkmale.find(x => x.id === z.id); if (m) { mo.merkmale.push(K.clone(m)); mHat.add(m.id); } }
-    mo.produkte.push(K.clone(p)); return true;
-  };
   /* ---------- Fahrzeuge, die nur noch im freigegebenen Katalog stehen ---------- */
   K.nurImKatalog = () => ent() ? nurLive(ent()) : [];
   function nurImKatalogHinweis(mo) {
     const fehlt = K.nurImKatalog(); if (!fehlt.length || ro()) return "";
-    return `<div class="hinweis warn kb-nurkat"><b>${fehlt.length === 1 ? "1 Fahrzeug steht" : fehlt.length + " Fahrzeuge stehen"} noch im Katalog des Vertriebs, im Entwurf aber nicht mehr</b> (${fehlt.slice(0, 4).map(p => esc(p.name)).join(", ")}${fehlt.length > 4 ? " …" : ""}). Mit der nächsten Freigabe verschwinden sie aus dem Katalog.
-      <div class="row" style="margin-top:8px"><button class="btn klein" type="button" data-act="kbAlleZurueck">Alle in den Entwurf zurückholen</button><button class="btn klein primary" type="button" data-act="kbJetztFreigeben">Jetzt freigeben, damit sie verschwinden</button></div></div>`;
+    return `<div class="hinweis warn kb-nurkat"><b>${fehlt.length === 1 ? "1 Fahrzeug steht" : fehlt.length + " Fahrzeuge stehen"} noch im Katalog des Vertriebs, aber nicht mehr hier</b> (${fehlt.slice(0, 4).map(p => esc(p.name)).join(", ")}${fehlt.length > 4 ? " …" : ""}). Das stammt aus einem früheren Löschen, das nur hier wirkte.
+      <div class="row" style="margin-top:8px"><button class="btn klein gefahr" type="button" data-act="kbRestLoeschen">Auch aus dem Katalog löschen</button><span class="klein gedimmt">Zurückholen danach über Studio › Protokoll.</span></div></div>`;
   }
+
   function baumAnsicht(mo) {
     const kb = K.kb;
     const famZeile = (g, t) => {
@@ -8540,13 +8584,11 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
         <button type="button" class="kb-auf" data-act="kbAufP" data-p="${p.id}" aria-label="${offen ? "Positionen zuklappen" : "Positionen aufklappen"}">${pm.length ? (offen ? "▾" : "▸") : ""}</button><button type="button" class="kb-nm" data-act="kbWahl" data-s="p:${p.id}"><span class="kb-ik">▢</span><span class="kb-artname">${esc(p.name)}<code>${esc(p.code || "")}</code></span></button><span class="kb-zahl" title="Vertriebscodes">${codesVon(p)}</span></div>
         ${offen && pm.length ? `<ul class="kb-posliste">${abs.map(ab => `${ab || abs.length > 1 ? `<li><div class="kb-zeile ueber" style="--t:${t + 1}"><span class="kb-auf"></span><span class="kb-ueber">${esc(ab || "Ohne Überschrift")}</span></div></li>` : ""}${pm.filter(x => (x.m.abschnitt || "") === ab).map(x => posZeile(x, t + (ab || abs.length > 1 ? 2 : 1))).join("")}`).join("")}</ul>` : ""}</li>`;
     };
-    const ohne = mo.produkte.filter(p => !p.gruppe || !gruppe(p.gruppe)), weg = nurLive(mo);
+    const ohne = mo.produkte.filter(p => !p.gruppe || !gruppe(p.gruppe));
     return `<nav class="panel kb-baum" aria-label="Katalog">
       <div class="kb-baumkopf"><b>Katalog</b>${ro() ? "" : `<button class="btn klein" type="button" data-act="kbFamNeu" data-g="">+ Familie</button>`}</div>
       <ul class="kb-liste" data-drop="g:">${kinder("").map(g => famZeile(g, 0)).join("")}
         ${ohne.length ? `<li><div class="kb-zeile fam gedimmt" style="--t:0"><span class="kb-auf"></span><span class="kb-nm">Ohne Familie (nicht im Katalog)</span></div><ul>${ohne.map(p => artZeile(p, 1)).join("")}</ul></li>` : ""}
-        ${weg.length ? `<li><div class="kb-zeile fam kb-weg" style="--t:0"><span class="kb-auf"></span><span class="kb-nm" title="Diese Fahrzeuge sieht der Vertrieb noch im Katalog. Im Entwurf sind sie gelöscht und verschwinden mit der nächsten Freigabe.">Nur noch im freigegebenen Katalog</span><span class="kb-zahl">${weg.length}</span>${ro() || weg.length < 2 ? "" : `<button type="button" class="btn klein" data-act="kbAlleZurueck" title="Alle wieder in den Entwurf übernehmen">alle</button>`}</div>
-          <ul>${weg.map(p => `<li><div class="kb-zeile art kb-weg" style="--t:1"><span class="kb-auf"></span><span class="kb-nm"><span class="kb-ik">▢</span><span class="kb-artname">${esc(p.name)}<code>${esc(p.code || "")} · wird bei Freigabe entfernt</code></span></span>${ro() ? "" : `<button type="button" class="btn klein" data-act="kbZurueckholen" data-p="${p.id}" title="Wieder in den Entwurf übernehmen, mit Familie und Positionen">Zurückholen</button>`}</div></li>`).join("")}</ul></li>` : ""}</ul>
       ${ro() ? "" : `<div class="kb-wurzel" data-drop="g:">Hierher ziehen = oberste Ebene</div>`}</nav>`;
   }
 
@@ -8560,7 +8602,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     return `<div class="panel kb-objekt" data-drop="g:${g.id}">
       <div class="eyebrow">${pfad.length ? pfad.map(x => esc(x.name)).join(" › ") + " ›" : "Familie"}</div>
       <div class="kb-kopf"><input id="kb-gname" class="flach titelfeld" data-chg="kbGName" value="${esc(g.name)}" aria-label="Name der Familie" ${St().dis()}>
-        ${ro() ? "" : `<button type="button" class="btn klein gefahr-text" data-act="kbLoeschen">${K.kb.loeschen === "g:" + g.id ? "Wirklich löschen?" : "Löschen"}</button>`}</div>
+        ${ro() ? "" : `<button type="button" class="btn klein gefahr-text" data-act="kbLoeschen">${K.kb.loeschen === "g:" + g.id ? `Familie mit ${fs.length + ks.reduce((n, k) => n + E.familienArtikel(mo, k.id).length, 0)} Fahrzeugen löschen?` : "Löschen"}</button>`}</div>
       <div class="formgitter">
         <div class="feld"><label for="kb-geltern">liegt unter</label><select id="kb-geltern" data-act="kbGEltern" ${St().dis()}><option value="">– oberste Ebene –</option>${mo.gruppen.filter(x => x.id !== g.id && !istUnter(g.id, x.id)).map(x => `<option value="${x.id}" ${x.id === g.eltern ? "selected" : ""}>${esc(E.gruppenPfad(mo, x.id).map(y => y.name).join(" › "))}</option>`).join("")}</select></div>
         <div class="feld"><label>Bild im Katalog</label>${bildFeld(g.bild, "kbBild", `data-s="g:${g.id}"`)}</div></div>
@@ -8701,9 +8743,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
   const A = K.act, I = K.inp;
   A.kbWahl = el => { const kb = K.kb; kb.sel = el.dataset.s; kb.pos = el.dataset.pos || null; kb.ziel = kb.pos || ""; kb.loeschen = null; kb.codeSuche = ""; if (kb.pos) kb.offen[kb.sel] = true; K.render(); K.nach(v => v.querySelector(".kb-mitte")?.scrollIntoView({ block: "nearest" })); };
   A.kbZuRegeln = el => { K.st.kontext = "p:" + el.dataset.p; K.st.regelTab = "tabellen"; K.gehe("studio-regeln"); };
-  A.kbZurueckholen = el => { const id = el.dataset.p; if (!K.kbZurueckholen(id)) return K.toast("Fahrzeug nicht gefunden."); const p = E.produkt(ent(), id); K.kb.sel = "p:" + id; K.kb.pos = null; geaendert(`${p.name} aus der freigegebenen Version zurückgeholt`); K.toast(`${p.name} ist wieder im Entwurf und kann bearbeitet werden.`); };
-  A.kbAlleZurueck = () => { const ids = nurLive(ent()).map(p => p.id); ids.forEach(id => K.kbZurueckholen(id)); geaendert(`${ids.length} Fahrzeuge aus der freigegebenen Version zurückgeholt`); K.toast(`${ids.length} Fahrzeuge wieder im Entwurf`); };
-  A.kbJetztFreigeben = () => { K.sheetZu(); K.gehe("studio-freigabe"); };
+  A.kbRestLoeschen = async el => { const ids = el.dataset.p ? [el.dataset.p] : K.nurImKatalog().map(p => p.id); K.sheetZu(); const lv = S().live || { produkte: [] }, namen = ids.map(id => (lv.produkte.find(x => x.id === id) || E.produkt(ent(), id) || { name: id }).name); await K.Store.endgueltigLoeschen({ produkte: ids }, ids.length === 1 ? `Fahrzeug ${namen[0]} gelöscht` : `${ids.length} Fahrzeuge gelöscht: ${namen.join(", ")}`); K.toast(`${ids.length === 1 ? "Fahrzeug" : ids.length + " Fahrzeuge"} gelöscht. Zurückholen über Studio › Protokoll.`); K.render(); };
   A.kbAufP = el => { const k = "p:" + el.dataset.p, kb = K.kb; kb.offen[k] = !(kb.offen[k] ?? (kb.sel === k)); K.render(); };
   A.kbPosZurueck = () => { K.kb.pos = null; K.kb.ziel = ""; K.render(); };
   A.kbRegelNeu = el => {
@@ -8726,21 +8766,18 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
   A.kbPFam = el => { const p = objekt(K.kb.sel); p.gruppe = el.value; geaendert(`${p.name} nach ${gruppe(el.value)?.name} verschoben`); };
   A.kbPAktiv = el => { const p = objekt(K.kb.sel); p.aktiv = el.checked; geaendert(`${p.name} ${el.checked ? "im Katalog sichtbar" : "ausgeblendet"}`); };
   A.kbKachelLoeschen = el => { K.kb.kachelLoeschen = el.dataset.p || null; K.render(); };
-  A.kbKachelLoeschenOk = el => { const mo = ent(), p = E.produkt(mo, el.dataset.p); K.kb.kachelLoeschen = null; if (!p) return K.render(); E.ausGeltungEntfernen(mo, [], [p.id]); mo.produkte = mo.produkte.filter(x => x !== p); geaendert(`Fahrzeug ${p.name} gelöscht`); K.toast(`${p.name} gelöscht. Im Katalog verschwindet es mit der nächsten Freigabe.`); };
-  A.kbLoeschen = () => {
-    const kb = K.kb, mo = ent(); if (kb.loeschen !== kb.sel) { kb.loeschen = kb.sel; return K.render(); }
-    const o = objekt(kb.sel);
-    if (kb.sel[0] === "g") {
-      for (const k of kinder(o.id)) k.eltern = o.eltern || null; for (const p of fahrzeuge(o.id)) p.gruppe = o.eltern || (mo.gruppen.find(x => x.id !== o.id)?.id || "");
-      E.ausGeltungEntfernen(mo, [o.id], []); mo.gruppen = mo.gruppen.filter(g => g !== o);
-      geaendert(`Familie ${o.name} gelöscht, Inhalt eine Ebene höher`);
-    } else { E.ausGeltungEntfernen(mo, [], [o.id]); mo.produkte = mo.produkte.filter(p => p !== o); geaendert(`Fahrzeug ${o.name} gelöscht`); }
-    kb.sel = o.eltern ? "g:" + o.eltern : o.gruppe ? "g:" + o.gruppe : ""; kb.loeschen = null; K.render();
+  A.kbKachelLoeschenOk = async el => { const p = E.produkt(ent(), el.dataset.p); K.kb.kachelLoeschen = null; if (!p) return K.render(); if (K.kb.sel === "p:" + p.id) K.kb.sel = ""; await K.Store.endgueltigLoeschen({ produkte: [p.id] }, `Fahrzeug ${p.name} (${p.code || p.id}) gelöscht`); K.toast(`${p.name} gelöscht. Zurückholen über Studio › Protokoll.`); K.render(); };
+  A.kbLoeschen = async () => {
+    const kb = K.kb; if (kb.loeschen !== kb.sel) { kb.loeschen = kb.sel; return K.render(); }
+    const o = objekt(kb.sel), fam = kb.sel[0] === "g"; kb.loeschen = null; kb.sel = ""; kb.pos = null; if (!o) return K.render();
+    if (fam) { const n = E.familienArtikel(ent(), o.id).length; await K.Store.endgueltigLoeschen({ gruppen: [o.id] }, `Familie ${o.name} mit ${n} Fahrzeug${n === 1 ? "" : "en"} gelöscht`); K.toast(`${o.name} gelöscht. Zurückholen über Studio › Protokoll.`); }
+    else { await K.Store.endgueltigLoeschen({ produkte: [o.id] }, `Fahrzeug ${o.name} (${o.code || o.id}) gelöscht`); K.toast(`${o.name} gelöscht. Zurückholen über Studio › Protokoll.`); }
+    K.render();
   };
   A.kbLeeren = () => {
     const kb = K.kb; if (!kb.leeren) { kb.leeren = true; K.render(); setTimeout(() => { kb.leeren = false; }, 6000); return; }
-    const mo = ent(); Object.assign(mo, { gruppen: [], produkte: [], merkmale: [], regeln: [] }); kb.leeren = false; kb.sel = "";
-    geaendert("Entwurf geleert, Katalog wird neu aufgebaut");
+    kb.leeren = false; kb.sel = ""; kb.pos = null;
+    K.Store.endgueltigLoeschen({ alles: true }, "Katalog komplett geleert (Neu beginnen)").then(() => { K.toast("Katalog geleert. Zurückholen über Studio › Protokoll."); K.render(); });
   };
   A.kbVorschau = () => { K.kat.entwurf = true; K.kat.gruppe = K.kb.sel[0] === "g" ? K.kb.sel.slice(2) : ""; K.gehe("katalog"); };
   // Codes und Gruppen am Fahrzeug
@@ -9642,7 +9679,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
             <td><span class="apx-kl"><input id="apx-k-${p.id}" class="mono kurz" data-chg="apxKlasse" data-p="${p.id}" value="${esc(AP.klasseVon(p, opts))}" maxlength="12" aria-label="Attributklasse" ${dis}>${eigen && !ro() ? `<button type="button" class="btn klein ghost" data-act="apxKlasseZurueck" data-p="${p.id}" title="Wieder aus der Artikelnummer bilden" aria-label="Attributklasse zurücksetzen">↺</button>` : ""}</span></td>
             <td class="r num">${E.produktMerkmale(mo, p).reduce((n, x) => n + x.werte.length, 0)}</td>
             <td class="r">${ro() ? "" : frage ? `<span class="apx-frage"><button type="button" class="btn klein gefahr" data-act="apxLoeschenOk" data-p="${p.id}">Löschen</button><button type="button" class="btn klein ghost" data-act="apxLoeschen" data-p="">Abbrechen</button></span>` : `<button type="button" class="btn klein gefahr-text" data-act="apxLoeschen" data-p="${p.id}" aria-label="${esc(p.name)} löschen">Löschen</button>`}</td></tr>`; }).join("") || `<tr><td colspan="6" class="gedimmt">Noch keine Fahrzeuge mit Codes. Erst im Katalogaufbau anlegen.</td></tr>`}</tbody></table>
-          ${K.apx.loeschen ? `<p class="klein gefahr-text">Das Fahrzeug wird aus dem Entwurf gelöscht (mit seinen Codes-Zuordnungen und Regel-Geltungen). Bis zur nächsten Freigabe bleibt die freigegebene Version unverändert.</p>` : ""}
+          ${K.apx.loeschen ? `<p class="klein gefahr-text">Das Fahrzeug wird aus Katalog aufbauen und aus dem Katalog gelöscht. Zurückholen über Studio › Protokoll.</p>` : ""}
           <p class="klein gedimmt">Attributklasse höchstens 12 Zeichen. Attributgruppen heißen Klasse-ZZ-Code (max. 15 Zeichen).</p></section>
         <section class="panel"><h3>Einstellungen</h3><div class="formgitter">
           <div class="feld"><label for="apx-m">Mandant</label><input id="apx-m" class="mono kurz" data-chg="apxOpt" data-k="mandant" value="${esc(opts.mandant)}" placeholder="leer" ${dis}></div>
@@ -9676,9 +9713,9 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
   K.act.apxLoeschen = el => { K.apx.loeschen = el.dataset.p || null; K.render(); };
   K.act.apxLoeschenOk = el => {
     const mo = S().entwurf, p = fzg(el.dataset.p); if (!p) return; K.apx.loeschen = null;
-    E.ausGeltungEntfernen(mo, [], [p.id]); mo.produkte = mo.produkte.filter(x => x !== p); K.apx.auswahl.delete(p.id);
+    K.apx.auswahl.delete(p.id); K.Store.endgueltigLoeschen({ produkte: [p.id] }, `Fahrzeug ${p.name} (${p.code || p.id}) gelöscht`).then(() => K.render());
     const o = AP.standardOpts(); if ((o.klassen || {})[p.id]) { const k = Object.assign({}, o.klassen); delete k[p.id]; optSetzen("klassen", k); }
-    aenderung(`Fahrzeug ${p.name} gelöscht`); K.toast(`${p.name} gelöscht`); K.render();
+    K.toast(`${p.name} gelöscht. Zurückholen über Studio › Protokoll.`);
   };
   K.act.apxTab = el => { K.apx.tab = el.dataset.t; K.render(); };
   K.act.apxLaden = async el => {
