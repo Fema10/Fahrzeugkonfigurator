@@ -1121,3 +1121,6 @@
 #konfigurator .kb-postitel code{font-size:13px;color:var(--muted)}
 #konfigurator .kb-posregeln{margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
 #konfigurator .kb-posfelder{margin:8px 0 14px}
+#konfigurator .kb-zeile.kb-weg{cursor:default;opacity:.85}#konfigurator .kb-zeile.kb-weg .kb-nm{color:var(--muted)}
+#konfigurator .kachel-weg{display:inline-block;margin-top:4px;font-size:11px;font-weight:600;color:var(--bad);background:#FDECEA;border-radius:8px;padding:1px 7px}
+#konfigurator .kb-nurkat{margin-bottom:12px}

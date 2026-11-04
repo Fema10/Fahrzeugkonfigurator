@@ -194,6 +194,7 @@
     return `<div class="kopfzeile"><div><div class="eyebrow">Studio · Entwurf</div><h2>Katalog aufbauen</h2><p>Familien anlegen und per Drag &amp; Drop ordnen. Artikel aus dem Artikelstamm rechts auf eine Familie ziehen ergibt ein Fahrzeug, auf ein Fahrzeug ziehen ergibt Vertriebscodes. Rechts Artikel suchen und mit „Übernehmen“ oder per Ziehen einfügen.</p></div>
       <div class="row"><button class="btn" type="button" data-act="kbVorschau">Vorschau im Katalog</button><a class="btn primary" href="#studio-freigabe">Freigeben</a>${ro() ? "" : `<button class="btn klein gefahr-text" type="button" data-act="kbLeeren">${kb.leeren ? "Wirklich alles leeren?" : "Neu beginnen"}</button>`}</div></div>
       ${leer ? `<div class="hinweis">Der Entwurf ist leer. Legen Sie links mit „+ Familie“ die erste Familie an, z. B. „Holztransport“.</div>` : mo.produkte.some(p => /^(ST|TB|TB3|PA|LN)$/.test(p.id)) ? `<div class="hinweis">Hier stehen noch die <b>Beispieldaten</b> (Schwertransport, Holztransport …). Mit „Neu beginnen“ starten Sie mit einem leeren Katalog. Der Vertrieb sieht weiter den alten Stand, bis Sie freigeben.</div>` : ""}
+      ${nurImKatalogHinweis(mo)}
       <div class="kb-layout">${baumAnsicht(mo)}<section class="kb-mitte">${mitte(mo)}</section>${pool(mo)}</div>`;
   });
   function objekt(sel) { if (!sel) return null; const id = sel.slice(2); return sel[0] === "g" ? gruppe(id) : E.produkt(ent(), id); }
@@ -203,6 +204,24 @@
   const typName = m => (E.GRUPPENTYPEN.find(([k]) => k === E.gruppentyp(m)) || [, "Auswahl"])[1];
   const typKurz = m => ({ kacheln: "Kacheln", liste: "Liste", dropdown: "Dropdown", mehrfach: "mehrere" })[E.gruppentyp(m)] || "Auswahl";
   const typIkon = m => ({ kacheln: "▦", liste: "☰", dropdown: "▾", mehrfach: "☑" })[E.gruppentyp(m)] || "•";
+  /** Fahrzeuge, die der Vertrieb noch sieht (freigegebene Version), die im Entwurf aber fehlen */
+  const nurLive = mo => { const lv = S().live; if (!lv || lv === mo) return []; const da = new Set(mo.produkte.map(p => p.id)); return (lv.produkte || []).filter(p => !da.has(p.id)); };
+  /** Fahrzeug aus der freigegebenen Version zurück in den Entwurf holen, mit fehlenden Familien und Positionen */
+  K.kbZurueckholen = pid => {
+    const mo = ent(), lv = S().live, p = lv && lv.produkte.find(x => x.id === pid); if (!mo || !p) return false;
+    const gHat = new Set(mo.gruppen.map(g => g.id)), mHat = new Set(mo.merkmale.map(m => m.id));
+    const kette = E.gruppenPfad(lv, p.gruppe);
+    for (const g of kette) if (!gHat.has(g.id)) { const kopie = K.clone(g); if (kopie.eltern && !gHat.has(kopie.eltern) && !kette.some(x => x.id === kopie.eltern)) kopie.eltern = null; mo.gruppen.push(kopie); gHat.add(g.id); }
+    for (const z of [...(p.merkmale || []), ...kette.flatMap(g => g.merkmale || [])]) if (!mHat.has(z.id)) { const m = lv.merkmale.find(x => x.id === z.id); if (m) { mo.merkmale.push(K.clone(m)); mHat.add(m.id); } }
+    mo.produkte.push(K.clone(p)); return true;
+  };
+  /* ---------- Fahrzeuge, die nur noch im freigegebenen Katalog stehen ---------- */
+  K.nurImKatalog = () => ent() ? nurLive(ent()) : [];
+  function nurImKatalogHinweis(mo) {
+    const fehlt = K.nurImKatalog(); if (!fehlt.length || ro()) return "";
+    return `<div class="hinweis warn kb-nurkat"><b>${fehlt.length === 1 ? "1 Fahrzeug steht" : fehlt.length + " Fahrzeuge stehen"} noch im Katalog des Vertriebs, im Entwurf aber nicht mehr</b> (${fehlt.slice(0, 4).map(p => esc(p.name)).join(", ")}${fehlt.length > 4 ? " …" : ""}). Mit der nächsten Freigabe verschwinden sie aus dem Katalog.
+      <div class="row" style="margin-top:8px"><button class="btn klein" type="button" data-act="kbAlleZurueck">Alle in den Entwurf zurückholen</button><button class="btn klein primary" type="button" data-act="kbJetztFreigeben">Jetzt freigeben, damit sie verschwinden</button></div></div>`;
+  }
   function baumAnsicht(mo) {
     const kb = K.kb;
     const famZeile = (g, t) => {
@@ -221,11 +240,13 @@
         <button type="button" class="kb-auf" data-act="kbAufP" data-p="${p.id}" aria-label="${offen ? "Positionen zuklappen" : "Positionen aufklappen"}">${pm.length ? (offen ? "▾" : "▸") : ""}</button><button type="button" class="kb-nm" data-act="kbWahl" data-s="p:${p.id}"><span class="kb-ik">▢</span><span class="kb-artname">${esc(p.name)}<code>${esc(p.code || "")}</code></span></button><span class="kb-zahl" title="Vertriebscodes">${codesVon(p)}</span></div>
         ${offen && pm.length ? `<ul class="kb-posliste">${abs.map(ab => `${ab || abs.length > 1 ? `<li><div class="kb-zeile ueber" style="--t:${t + 1}"><span class="kb-auf"></span><span class="kb-ueber">${esc(ab || "Ohne Überschrift")}</span></div></li>` : ""}${pm.filter(x => (x.m.abschnitt || "") === ab).map(x => posZeile(x, t + (ab || abs.length > 1 ? 2 : 1))).join("")}`).join("")}</ul>` : ""}</li>`;
     };
-    const ohne = mo.produkte.filter(p => !p.gruppe || !gruppe(p.gruppe));
+    const ohne = mo.produkte.filter(p => !p.gruppe || !gruppe(p.gruppe)), weg = nurLive(mo);
     return `<nav class="panel kb-baum" aria-label="Katalog">
       <div class="kb-baumkopf"><b>Katalog</b>${ro() ? "" : `<button class="btn klein" type="button" data-act="kbFamNeu" data-g="">+ Familie</button>`}</div>
       <ul class="kb-liste" data-drop="g:">${kinder("").map(g => famZeile(g, 0)).join("")}
-        ${ohne.length ? `<li><div class="kb-zeile fam gedimmt" style="--t:0"><span class="kb-auf"></span><span class="kb-nm">Ohne Familie (nicht im Katalog)</span></div><ul>${ohne.map(p => artZeile(p, 1)).join("")}</ul></li>` : ""}</ul>
+        ${ohne.length ? `<li><div class="kb-zeile fam gedimmt" style="--t:0"><span class="kb-auf"></span><span class="kb-nm">Ohne Familie (nicht im Katalog)</span></div><ul>${ohne.map(p => artZeile(p, 1)).join("")}</ul></li>` : ""}
+        ${weg.length ? `<li><div class="kb-zeile fam kb-weg" style="--t:0"><span class="kb-auf"></span><span class="kb-nm" title="Diese Fahrzeuge sieht der Vertrieb noch im Katalog. Im Entwurf sind sie gelöscht und verschwinden mit der nächsten Freigabe.">Nur noch im freigegebenen Katalog</span><span class="kb-zahl">${weg.length}</span>${ro() || weg.length < 2 ? "" : `<button type="button" class="btn klein" data-act="kbAlleZurueck" title="Alle wieder in den Entwurf übernehmen">alle</button>`}</div>
+          <ul>${weg.map(p => `<li><div class="kb-zeile art kb-weg" style="--t:1"><span class="kb-auf"></span><span class="kb-nm"><span class="kb-ik">▢</span><span class="kb-artname">${esc(p.name)}<code>${esc(p.code || "")} · wird bei Freigabe entfernt</code></span></span>${ro() ? "" : `<button type="button" class="btn klein" data-act="kbZurueckholen" data-p="${p.id}" title="Wieder in den Entwurf übernehmen, mit Familie und Positionen">Zurückholen</button>`}</div></li>`).join("")}</ul></li>` : ""}</ul>
       ${ro() ? "" : `<div class="kb-wurzel" data-drop="g:">Hierher ziehen = oberste Ebene</div>`}</nav>`;
   }
 
@@ -380,6 +401,9 @@
   const A = K.act, I = K.inp;
   A.kbWahl = el => { const kb = K.kb; kb.sel = el.dataset.s; kb.pos = el.dataset.pos || null; kb.ziel = kb.pos || ""; kb.loeschen = null; kb.codeSuche = ""; if (kb.pos) kb.offen[kb.sel] = true; K.render(); K.nach(v => v.querySelector(".kb-mitte")?.scrollIntoView({ block: "nearest" })); };
   A.kbZuRegeln = el => { K.st.kontext = "p:" + el.dataset.p; K.st.regelTab = "tabellen"; K.gehe("studio-regeln"); };
+  A.kbZurueckholen = el => { const id = el.dataset.p; if (!K.kbZurueckholen(id)) return K.toast("Fahrzeug nicht gefunden."); const p = E.produkt(ent(), id); K.kb.sel = "p:" + id; K.kb.pos = null; geaendert(`${p.name} aus der freigegebenen Version zurückgeholt`); K.toast(`${p.name} ist wieder im Entwurf und kann bearbeitet werden.`); };
+  A.kbAlleZurueck = () => { const ids = nurLive(ent()).map(p => p.id); ids.forEach(id => K.kbZurueckholen(id)); geaendert(`${ids.length} Fahrzeuge aus der freigegebenen Version zurückgeholt`); K.toast(`${ids.length} Fahrzeuge wieder im Entwurf`); };
+  A.kbJetztFreigeben = () => { K.sheetZu(); K.gehe("studio-freigabe"); };
   A.kbAufP = el => { const k = "p:" + el.dataset.p, kb = K.kb; kb.offen[k] = !(kb.offen[k] ?? (kb.sel === k)); K.render(); };
   A.kbPosZurueck = () => { K.kb.pos = null; K.kb.ziel = ""; K.render(); };
   A.kbRegelNeu = el => {
