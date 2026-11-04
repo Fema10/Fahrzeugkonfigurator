@@ -26,7 +26,6 @@ Stand: 04.11.2026
 ## Später
 
 - Testskripte als `tests/` ins Repository übernehmen, mit einem Startbefehl.
-
 - Rücklesen der SACH*-Tabellen zum Abgleich App ↔ APplus.
 - KONFIGOK-Attribut für vollständige Konfiguration.
 - ARTIKEL automatisch aktualisieren (Attributklasse, HASVSTUELI).
