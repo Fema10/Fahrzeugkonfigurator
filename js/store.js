@@ -121,7 +121,7 @@
     artikel: new Map(), artikelQuelle: null,
     artikelSetzen(rows, quelle) {
       // Bildspalte: Adresse oder HTML wie <img src="…">; Backslashes im Pfad werden zu /
-      const bildAus = v => { let t = String(v || "").trim(); if (!t) return ""; const m = t.match(/src\s*=\s*["']([^"']+)["']/i); if (m) t = m[1]; return t.replace(/\\/g, "/"); };
+      const bildAus = this.bildAus = v => { let t = String(v || "").trim(); if (!t) return ""; const m = t.match(/src\s*=\s*["']([^"']+)["']/i); if (m) t = m[1]; return t.replace(/\\/g, "/"); };
       const sp = (K.cfg && K.cfg.artikelSpalten) || {}, map = new Map();
       const norm = s => String(s).toUpperCase().replace(/[^A-Z0-9]/g, "");
       for (const r of Array.isArray(rows) ? rows : []) {

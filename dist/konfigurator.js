@@ -4010,7 +4010,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     artikel: new Map(), artikelQuelle: null,
     artikelSetzen(rows, quelle) {
       // Bildspalte: Adresse oder HTML wie <img src="…">; Backslashes im Pfad werden zu /
-      const bildAus = v => { let t = String(v || "").trim(); if (!t) return ""; const m = t.match(/src\s*=\s*["']([^"']+)["']/i); if (m) t = m[1]; return t.replace(/\\/g, "/"); };
+      const bildAus = this.bildAus = v => { let t = String(v || "").trim(); if (!t) return ""; const m = t.match(/src\s*=\s*["']([^"']+)["']/i); if (m) t = m[1]; return t.replace(/\\/g, "/"); };
       const sp = (K.cfg && K.cfg.artikelSpalten) || {}, map = new Map();
       const norm = s => String(s).toUpperCase().replace(/[^A-Z0-9]/g, "");
       for (const r of Array.isArray(rows) ? rows : []) {
@@ -6267,13 +6267,28 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
       <div class="row"><button class="btn" type="button" data-act="lokalNeu">Daten aus APplus neu laden</button></div></section>`;
   }
   K.inp.abfName = async el => { const e = S().einst; e.abfragen = Object.assign({}, e.abfragen || {}, { [el.dataset.k]: el.value.trim() }); await K.Store.einstSpeichern(e, true); K.Store.log("Einstellungen", `Abfrage ${el.dataset.k}: ${el.value.trim() || "–"}`); K.render(); };
+  /** Erstes Bild der Artikel-Abfrage probeweise laden und das Ergebnis zeigen */
+  function bildPruefen(rows) {
+    const ziel = K.el("abf-bild"); if (!ziel) return;
+    const sp = ((K.cfg.artikelSpalten || {}).bild || ["BILD", "DOCUMENTS"]).map(x => x.toUpperCase());
+    let roh = "", spalte = "";
+    for (const r of rows) { for (const [h, v] of Object.entries(r || {})) if (sp.includes(h.toUpperCase()) && String(v || "").trim()) { roh = String(v); spalte = h; break; } if (roh) break; }
+    if (!roh) { ziel.innerHTML = `<span class="gedimmt">Keine Bildspalte mit Inhalt gefunden (erkannt werden ${sp.join(", ")}).</span>`; return; }
+    const url = K.Store.bildAus ? K.Store.bildAus(roh) : roh; let voll = url; try { voll = new URL(url, location.href).href; } catch (e) {}
+    ziel.innerHTML = `Bild aus <code>${esc(spalte)}</code>: <code>${esc(roh)}</code><br>Aufgerufene Adresse: <code>${esc(voll)}</code><br><span id="abf-bild-st">lade …</span>`;
+    const img = new Image(), st = () => K.el("abf-bild-st");
+    img.onload = () => { if (st()) st().innerHTML = `<span class="ok-text">Bild lädt (${img.naturalWidth} × ${img.naturalHeight} px).</span>`; };
+    img.onerror = () => { if (st()) st().innerHTML = `<span class="warntext">Bild lädt nicht.</span> ${/^(\\\\|[a-z]:[\\/])/i.test(roh) ? "Netzwerk- und Laufwerkspfade kann der Browser nicht öffnen. Die Abfrage muss eine Web-Adresse liefern." : "Unter dieser Adresse liefert der Server kein Bild. Bitte die Adresse im Browser aufrufen und prüfen."}`; };
+    img.src = url;
+  }
   K.act.abfTest = async el => {
     const k = el.dataset.k, name = K.Store.abfragen()[k], t = K.el("abf-test"); t.textContent = `frage ${name} ab …`;
     try {
       const rows = await K.cfg.loadQuery(name, k);
       if (!Array.isArray(rows)) { t.innerHTML = `<span class="warntext">${location.protocol === "file:" ? "Abfragen lassen sich nur innerhalb von APplus abrufen." : "Die Abfrage hat keine Daten geliefert."}</span>`; return; }
       const kopf = [...new Set(rows.slice(0, 50).flatMap(r => Object.keys(r || {})))];
-      t.innerHTML = `<b>${esc(name)}</b>: ${K.zahl(rows.length)} Zeilen · Spalten ${kopf.map(h => `<code>${esc(h)}</code>`).join(", ") || "–"}${rows[0] ? `<br>Beispiel: ${esc(kopf.map(h => rows[0][h]).join(" · "))}` : ""}${k === "artikel" && !kopf.some(h => h.toUpperCase() === "ARTIKEL") ? `<br><span class="warntext">Spalte ARTIKEL fehlt.</span>` : ""}<br>Mit „Daten aus APplus neu laden“ übernehmen.`;
+      t.innerHTML = `<b>${esc(name)}</b>: ${K.zahl(rows.length)} Zeilen · Spalten ${kopf.map(h => `<code>${esc(h)}</code>`).join(", ") || "–"}${rows[0] ? `<br>Beispiel: ${esc(kopf.map(h => rows[0][h]).join(" · "))}` : ""}${k === "artikel" && !kopf.some(h => h.toUpperCase() === "ARTIKEL") ? `<br><span class="warntext">Spalte ARTIKEL fehlt.</span>` : ""}<br>Mit „Daten aus APplus neu laden“ übernehmen.<div id="abf-bild"></div>`;
+      if (k === "artikel") bildPruefen(rows);
     } catch (err) { t.innerHTML = `<span class="warntext">${esc(name)}: ${esc(err.message || err)}</span>`; }
   };
   function nummernPanel(e, f) {
