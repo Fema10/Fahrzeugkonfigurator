@@ -5069,7 +5069,8 @@
         const n = {}; for (const [k, v] of Object.entries(r)) n[norm(k)] = v;
         const f = (key, fallback) => { for (const c of (sp[key] || []).concat(fallback || [])) { const v = n[norm(c)]; if (v != null && String(v).trim() !== "") return v; } return ""; };
         const code = String(f("code", ["code", "artikel"])).trim(); if (!code) continue;
-        const zahl = v => typeof v === "number" ? v : (K.X ? K.X.zahl(v) : parseFloat(String(v).replace(",", ".")) || 0);
+        // Leere oder fehlende Spalte = kein Wert (null), damit z. B. eine Abfrage nur mit ARTIKEL und NAME keine Preise auf 0 setzt
+        const zahl = v => v === "" || v == null ? null : typeof v === "number" ? v : (K.X ? K.X.zahl(v) : parseFloat(String(v).replace(",", ".")) || 0);
         map.set(code.toUpperCase(), { code, name: String(f("name", ["name"])).trim(), preis: zahl(f("preis", ["preis"])), kosten: zahl(f("kosten", ["kosten"])), me: String(f("me", ["me"])).trim(), gruppe: String(f("gruppe", ["gruppe"])).trim() });
       }
       this.artikel = map; this.artikelQuelle = map.size ? quelle : null;
@@ -7638,7 +7639,7 @@
     return `<section class="panel"><div class="formgitter">
       <div class="feld"><label for="p-preis">Grundpreis netto</label><input id="p-preis" type="number" step="100" data-in="pZahl" data-k="basispreis" value="${p.basispreis}" ${dis()}></div>
       <div class="feld"><label for="p-kosten">Herstellkosten</label><input id="p-kosten" type="number" step="100" data-in="pZahl" data-k="basiskosten" value="${p.basiskosten}" ${dis()}></div>
-      ${a ? `<div class="feld"><label>Im Artikelstamm</label><div class="wert">${K.eur(a.preis)}${a.kosten ? ` · Kosten ${K.eur(a.kosten)}` : ""}${(a.preis && a.preis !== p.basispreis) && !ro() ? ` <button class="btn klein" type="button" data-act="mPreisAusArtikel">übernehmen</button>` : ""}</div></div>` : ""}</div></section>
+      ${a ? `<div class="feld"><label>Im Artikelstamm</label><div class="wert">${a.preis != null ? K.eur(a.preis) : "kein Preis in der Abfrage"}${a.kosten ? ` · Kosten ${K.eur(a.kosten)}` : ""}${(a.preis && a.preis !== p.basispreis) && !ro() ? ` <button class="btn klein" type="button" data-act="mPreisAusArtikel">übernehmen</button>` : ""}</div></div>` : ""}</div></section>
       ${(p.grundausstattung || []).length ? `<section class="panel"><div class="panelkopf"><h3>Grundausstattung (inklusive)</h3><span class="klein gedimmt">${p.grundausstattung.length} Positionen · aus dem Excel-Import, im Grundpreis enthalten</span></div>
         <div class="tabwrap ohne-rand"><table class="kompakt"><thead><tr><th>Gruppe</th><th>Code</th><th>Bezeichnung</th><th class="r">Wert</th>${ro() ? "" : "<th></th>"}</tr></thead><tbody>
         ${p.grundausstattung.map((x, i) => `<tr><td class="gedimmt">${esc(x.gruppe || "")}</td><td class="mono">${esc(x.code)}</td><td>${esc(x.name)}</td><td class="r num">${x.preis ? K.eur(x.preis) : "inkl."}</td>${ro() ? "" : `<td><button type="button" class="ikon gefahr" data-act="mGaWeg" data-i="${i}" title="Entfernen">✕</button></td>`}</tr>`).join("")}

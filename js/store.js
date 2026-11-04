@@ -116,7 +116,8 @@
         const n = {}; for (const [k, v] of Object.entries(r)) n[norm(k)] = v;
         const f = (key, fallback) => { for (const c of (sp[key] || []).concat(fallback || [])) { const v = n[norm(c)]; if (v != null && String(v).trim() !== "") return v; } return ""; };
         const code = String(f("code", ["code", "artikel"])).trim(); if (!code) continue;
-        const zahl = v => typeof v === "number" ? v : (K.X ? K.X.zahl(v) : parseFloat(String(v).replace(",", ".")) || 0);
+        // Leere oder fehlende Spalte = kein Wert (null), damit z. B. eine Abfrage nur mit ARTIKEL und NAME keine Preise auf 0 setzt
+        const zahl = v => v === "" || v == null ? null : typeof v === "number" ? v : (K.X ? K.X.zahl(v) : parseFloat(String(v).replace(",", ".")) || 0);
         map.set(code.toUpperCase(), { code, name: String(f("name", ["name"])).trim(), preis: zahl(f("preis", ["preis"])), kosten: zahl(f("kosten", ["kosten"])), me: String(f("me", ["me"])).trim(), gruppe: String(f("gruppe", ["gruppe"])).trim() });
       }
       this.artikel = map; this.artikelQuelle = map.size ? quelle : null;
