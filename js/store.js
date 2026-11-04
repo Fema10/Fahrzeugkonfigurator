@@ -77,7 +77,7 @@
       if (q.vertrieb && q.vertrieb.length) { S.einst ||= d.einstellungen; S.einst.vertrieb = q.vertrieb; S.einst.vertriebQuelle = "applus"; }
       const ex = q.artikel ? null : this._artikelAusExcel();
       this.artikelSetzen(q.artikel || ex || d.artikel || [], q.artikel ? "applus" : ex && ex.length ? "excel" : "beispiel");
-      if (q.artikel) this.stammAnwenden();
+      if (q.artikel) try { this.stammAnwenden(); } catch (e) { console.warn("[Konfigurator] Stammabgleich mit ARTIKEL übersprungen:", e); }
       if (!S.einst) S.einst = d.einstellungen;
       S.prefs ||= { favoriten: [] }; S.quelle = q.modell ? "applus" : "lokal"; S.geladen = true;
       this._melde("alles");
@@ -112,8 +112,8 @@
     artikelSetzen(rows, quelle) {
       const sp = (K.cfg && K.cfg.artikelSpalten) || {}, map = new Map();
       const norm = s => String(s).toUpperCase().replace(/[^A-Z0-9]/g, "");
-      for (const r of rows || []) {
-        const n = {}; for (const [k, v] of Object.entries(r)) n[norm(k)] = v;
+      for (const r of Array.isArray(rows) ? rows : []) {
+        if (!r || typeof r !== "object") continue; const n = {}; for (const [k, v] of Object.entries(r)) n[norm(k)] = v;
         const f = (key, fallback) => { for (const c of (sp[key] || []).concat(fallback || [])) { const v = n[norm(c)]; if (v != null && String(v).trim() !== "") return v; } return ""; };
         const code = String(f("code", ["code", "artikel"])).trim(); if (!code) continue;
         // Leere oder fehlende Spalte = kein Wert (null), damit z. B. eine Abfrage nur mit ARTIKEL und NAME keine Preise auf 0 setzt
@@ -140,12 +140,12 @@
       if (this.artikelQuelle !== "applus") return 0; let n = 0;
       for (const mo of [this.S.live, this.S.entwurf]) {
         if (!mo) continue;
-        for (const m of mo.merkmale || []) for (const w of m.werte) {
-          if (w.apStamm === false || !w.code) continue; const a = this.artikelZu(w.code); if (!a) continue;
+        for (const m of Array.isArray(mo.merkmale) ? mo.merkmale : []) for (const w of Array.isArray(m && m.werte) ? m.werte : []) {
+          if (!w || w.apStamm === false || !w.code) continue; const a = this.artikelZu(w.code); if (!a) continue;
           if (a.name && w.name !== a.name) { w.name = a.name; n++; } if (a.preis != null && w.preis !== a.preis) { w.preis = a.preis; n++; } if (a.kosten && w.kosten !== a.kosten) w.kosten = a.kosten;
         }
-        for (const p of mo.produkte || []) {
-          if (p.apStamm === false || !p.code) continue; const a = this.artikelZu(p.code); if (!a) continue;
+        for (const p of Array.isArray(mo.produkte) ? mo.produkte : []) {
+          if (!p || p.apStamm === false || !p.code) continue; const a = this.artikelZu(p.code); if (!a) continue;
           if (a.preis && p.basispreis !== a.preis) { p.basispreis = a.preis; n++; } if (a.kosten) p.basiskosten = a.kosten;
         }
       }
