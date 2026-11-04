@@ -96,7 +96,7 @@
   K.bildMitErsatz = (url, ersatz) => `<img src="${esc(url)}" alt="" loading="lazy" data-ersatz="${esc(ersatz)}">`;
   K.produktBildHtml = (p, farbe) => { const ers = K.silhouette(p.visual?.typ, farbe || "var(--ink)"); if (p.bild) return `<img src="${K.bildUrl(p.bild)}" alt="" loading="lazy">`; const a = K.artikelBild(p.code); return a ? K.bildMitErsatz(a, ers) : ers; };
   const produktBild = (p, farbe) => K.produktBildHtml(p, farbe);
-  document.addEventListener("error", e => { const t = e.target; if (t && t.tagName === "IMG" && t.dataset && t.dataset.ersatz != null && t.parentNode) { const d = document.createElement("span"); d.innerHTML = t.dataset.ersatz; t.replaceWith(...d.childNodes); } }, true);
+  document.addEventListener("error", e => { const t = e.target; if (t && t.tagName === "IMG" && t.dataset && t.dataset.ersatz != null && t.parentNode) { const d = document.createElement("span"); d.className = "bild-ersatz"; d.title = "Bild nicht geladen: " + t.src; d.innerHTML = t.dataset.ersatz; console.info("[Konfigurator] Bild nicht geladen:", t.src); t.replaceWith(d); } }, true);
   function gruppenBild(mo, g) {
     if (g.bild) return `<img src="${K.bildUrl(g.bild)}" alt="">`;
     const p = mo.produkte.find(x => nachfahren(mo, g.id).includes(x.gruppe));
