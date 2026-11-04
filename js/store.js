@@ -120,10 +120,12 @@
     /* ---------- Artikelstamm (APplus-Tabelle ARTIKEL, Feld ARTIKEL) ---------- */
     artikel: new Map(), artikelQuelle: null,
     /** Bildadressen neu bilden, z. B. nach Änderung der Adresse vor dem Bildpfad */
+    /** APplus legt Dokumente unter <App>/DocLib/ ab, z. B. https://erp/APplusProd/DocLib/WK3/WK367.png */
+    bildBasisStandard() { if (location.protocol === "file:") return ""; const app = location.pathname.split("/").slice(0, 2).join("/"); return app ? app + "/DocLib/" : ""; },
     bilderNeu() { if (!this.bildAus) return; for (const a of this.artikel.values()) a.bild = this.bildAus(a.bildRoh); },
     artikelSetzen(rows, quelle) {
       // Bildspalte: Adresse oder HTML wie <img src="…">; Backslashes im Pfad werden zu /
-      const bildAus = this.bildAus = v => { let t = String(v || "").trim(); if (!t) return ""; const m = t.match(/src\s*=\s*["']([^"']+)["']/i); if (m) t = m[1]; t = t.replace(/\\/g, "/"); const basis = String((this.S && this.S.einst && this.S.einst.bildBasis) || (K.cfg && K.cfg.bildBasis) || "").trim(); if (basis && !/^([a-z]+:|\/\/|\/)/i.test(t)) t = basis.replace(/\/*$/, "/") + t.replace(/^\.?\//, ""); return t; };
+      const bildAus = this.bildAus = v => { let t = String(v || "").trim(); if (!t) return ""; const m = t.match(/src\s*=\s*["']([^"']+)["']/i); if (m) t = m[1]; t = t.replace(/\\/g, "/"); const basis = String((this.S && this.S.einst && this.S.einst.bildBasis) || (K.cfg && K.cfg.bildBasis) || this.bildBasisStandard()).trim(); if (basis && !/^([a-z]+:|\/\/|\/)/i.test(t)) t = basis.replace(/\/*$/, "/") + t.replace(/^\.?\//, ""); return t; };
       const sp = (K.cfg && K.cfg.artikelSpalten) || {}, map = new Map();
       const norm = s => String(s).toUpperCase().replace(/[^A-Z0-9]/g, "");
       for (const r of Array.isArray(rows) ? rows : []) {
