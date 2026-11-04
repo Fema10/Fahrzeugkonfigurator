@@ -119,9 +119,11 @@
     },
     /* ---------- Artikelstamm (APplus-Tabelle ARTIKEL, Feld ARTIKEL) ---------- */
     artikel: new Map(), artikelQuelle: null,
+    /** Bildadressen neu bilden, z. B. nach Änderung der Adresse vor dem Bildpfad */
+    bilderNeu() { if (!this.bildAus) return; for (const a of this.artikel.values()) a.bild = this.bildAus(a.bildRoh); },
     artikelSetzen(rows, quelle) {
       // Bildspalte: Adresse oder HTML wie <img src="…">; Backslashes im Pfad werden zu /
-      const bildAus = this.bildAus = v => { let t = String(v || "").trim(); if (!t) return ""; const m = t.match(/src\s*=\s*["']([^"']+)["']/i); if (m) t = m[1]; return t.replace(/\\/g, "/"); };
+      const bildAus = this.bildAus = v => { let t = String(v || "").trim(); if (!t) return ""; const m = t.match(/src\s*=\s*["']([^"']+)["']/i); if (m) t = m[1]; t = t.replace(/\\/g, "/"); const basis = String((this.S && this.S.einst && this.S.einst.bildBasis) || (K.cfg && K.cfg.bildBasis) || "").trim(); if (basis && !/^([a-z]+:|\/\/|\/)/i.test(t)) t = basis.replace(/\/*$/, "/") + t.replace(/^\.?\//, ""); return t; };
       const sp = (K.cfg && K.cfg.artikelSpalten) || {}, map = new Map();
       const norm = s => String(s).toUpperCase().replace(/[^A-Z0-9]/g, "");
       for (const r of Array.isArray(rows) ? rows : []) {
@@ -130,7 +132,7 @@
         const code = String(f("code", ["code", "artikel"])).trim(); if (!code) continue;
         // Leere oder fehlende Spalte = kein Wert (null), damit z. B. eine Abfrage nur mit ARTIKEL und NAME keine Preise auf 0 setzt
         const zahl = v => v === "" || v == null ? null : typeof v === "number" ? v : (K.X ? K.X.zahl(v) : parseFloat(String(v).replace(",", ".")) || 0);
-        map.set(code.toUpperCase(), { code, name: String(f("name", ["name"])).trim(), preis: zahl(f("preis", ["preis"])), kosten: zahl(f("kosten", ["kosten"])), me: String(f("me", ["me"])).trim(), gruppe: String(f("gruppe", ["gruppe"])).trim(), bild: bildAus(f("bild", ["bild"])) });
+        map.set(code.toUpperCase(), { code, name: String(f("name", ["name"])).trim(), preis: zahl(f("preis", ["preis"])), kosten: zahl(f("kosten", ["kosten"])), me: String(f("me", ["me"])).trim(), gruppe: String(f("gruppe", ["gruppe"])).trim(), bildRoh: String(f("bild", ["bild"]) || ""), bild: bildAus(f("bild", ["bild"])) });
       }
       this.artikel = map; this.artikelQuelle = map.size ? quelle : null;
     },

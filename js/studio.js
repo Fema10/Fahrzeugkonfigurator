@@ -868,7 +868,8 @@
         <td><input id="abf-${k}" class="mono" data-chg="abfName" data-k="${k}" value="${esc((e.abfragen || {})[k] ?? cfg[k] ?? "")}" placeholder="z. B. apx_Artikeldaten" aria-label="Abfrage für ${t}" ${dis()}></td>
         <td class="klein" id="abf-st-${k}">${s0 ? s0.fehler ? `<span class="warntext">${esc(s0.fehler)}</span>` : `<span class="ok-text">${K.zahl(s0.zeilen)} Zeilen geladen</span>` : qs[k] ? "noch nicht geladen" : "–"}</td>
         <td><button class="btn klein" type="button" data-act="abfTest" data-k="${k}" ${qs[k] ? "" : "disabled"}>Testen</button></td></tr>`; }).join("")}</tbody></table></div>
-      <div id="abf-test" class="klein" aria-live="polite"></div>
+      <div class="feld abf-basis"><label for="abf-basis">Adresse vor dem Bildpfad</label><input id="abf-basis" class="mono" data-chg="abfBasis" value="${esc(e.bildBasis || "")}" placeholder="z. B. https://server/APplus/documents/" ${dis()}><span class="klein gedimmt">Wird vor relative Bildpfade aus der Abfrage gesetzt (z. B. <code>AB0/AB030.png</code>). Die richtige Adresse finden Sie, wenn Sie in APplus ein Artikelbild im Browser öffnen bzw. „Bildadresse kopieren“ und den Dateinamen abschneiden.</span></div>
+      <div id="abf-test" class="klein" aria-live="polite"></div>${(K.nach(testZeigen), "")}
       <div class="row"><button class="btn" type="button" data-act="lokalNeu">Daten aus APplus neu laden</button></div></section>`;
   }
   K.inp.abfName = async el => { const e = S().einst; e.abfragen = Object.assign({}, e.abfragen || {}, { [el.dataset.k]: el.value.trim() }); await K.Store.einstSpeichern(e, true); K.Store.log("Einstellungen", `Abfrage ${el.dataset.k}: ${el.value.trim() || "–"}`); K.render(); };
@@ -886,15 +887,21 @@
     img.onerror = () => { if (st()) st().innerHTML = `<span class="warntext">Bild lädt nicht.</span> ${/^(\\\\|[a-z]:[\\/])/i.test(roh) ? "Netzwerk- und Laufwerkspfade kann der Browser nicht öffnen. Die Abfrage muss eine Web-Adresse liefern." : "Unter dieser Adresse liefert der Server kein Bild. Bitte die Adresse im Browser aufrufen und prüfen."}`; };
     img.src = url;
   }
+  K.inp.abfBasis = async el => { const e = S().einst; e.bildBasis = el.value.trim(); await K.Store.einstSpeichern(e, true); K.Store.log("Einstellungen", `Bildadresse: ${e.bildBasis || "–"}`); K.Store.bilderNeu(); K.render(); };
+  function testZeigen() {
+    const t = K.el("abf-test"), r = K.abfLetzt; if (!t || !r) return;
+    if (r.fehler) { t.innerHTML = `<span class="warntext">${esc(r.name)}: ${esc(r.fehler)}</span>`; return; }
+    const rows = r.rows, kopf = [...new Set(rows.slice(0, 50).flatMap(x => Object.keys(x || {})))];
+    t.innerHTML = `<b>${esc(r.name)}</b>: ${K.zahl(rows.length)} Zeilen · Spalten ${kopf.map(h => `<code>${esc(h)}</code>`).join(", ") || "–"}${rows[0] ? `<br>Beispiel: ${esc(kopf.map(h => rows[0][h]).join(" · "))}` : ""}${r.k === "artikel" && !kopf.some(h => h.toUpperCase() === "ARTIKEL") ? `<br><span class="warntext">Spalte ARTIKEL fehlt.</span>` : ""}<br>Mit „Daten aus APplus neu laden“ übernehmen.<div id="abf-bild"></div>`;
+    if (r.k === "artikel") bildPruefen(rows);
+  }
   K.act.abfTest = async el => {
     const k = el.dataset.k, name = K.Store.abfragen()[k], t = K.el("abf-test"); t.textContent = `frage ${name} ab …`;
     try {
       const rows = await K.cfg.loadQuery(name, k);
-      if (!Array.isArray(rows)) { t.innerHTML = `<span class="warntext">${location.protocol === "file:" ? "Abfragen lassen sich nur innerhalb von APplus abrufen." : "Die Abfrage hat keine Daten geliefert."}</span>`; return; }
-      const kopf = [...new Set(rows.slice(0, 50).flatMap(r => Object.keys(r || {})))];
-      t.innerHTML = `<b>${esc(name)}</b>: ${K.zahl(rows.length)} Zeilen · Spalten ${kopf.map(h => `<code>${esc(h)}</code>`).join(", ") || "–"}${rows[0] ? `<br>Beispiel: ${esc(kopf.map(h => rows[0][h]).join(" · "))}` : ""}${k === "artikel" && !kopf.some(h => h.toUpperCase() === "ARTIKEL") ? `<br><span class="warntext">Spalte ARTIKEL fehlt.</span>` : ""}<br>Mit „Daten aus APplus neu laden“ übernehmen.<div id="abf-bild"></div>`;
-      if (k === "artikel") bildPruefen(rows);
-    } catch (err) { t.innerHTML = `<span class="warntext">${esc(name)}: ${esc(err.message || err)}</span>`; }
+      if (!Array.isArray(rows)) { K.abfLetzt = { k, name, fehler: location.protocol === "file:" ? "Abfragen lassen sich nur innerhalb von APplus abrufen." : "Die Abfrage hat keine Daten geliefert." }; return testZeigen(); }
+      K.abfLetzt = { k, name, rows }; testZeigen();
+    } catch (err) { K.abfLetzt = { k, name, fehler: err.message || String(err) }; testZeigen(); }
   };
   function nummernPanel(e, f) {
     const z = Object.assign({ quelle: "app", abfrage: (K.cfg.queries || {}).angebotsnummer || "", feld: "", art: "naechste", ersatz: false }, e.nummern || {}), ap = z.quelle === "applus";
