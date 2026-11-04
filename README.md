@@ -1,5 +1,7 @@
 # Fahrzeugkonfigurator (CPQ-Prototyp)
 
+**Dokumentation:** [docs/](docs/README.md) – Idee und Ziele, Prozesse, Bedienung, Codesystem, APplus-Anbindung, Architektur, Betrieb, offene Punkte.
+
 Reines JavaScript und CSS, ohne Build-Werkzeug, damit es in ein APplus-Dashboard passt.
 
 ## Aufbau
