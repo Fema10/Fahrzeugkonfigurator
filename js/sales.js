@@ -142,7 +142,9 @@
     for (const [mid, wid] of Object.entries(k.filter)) if (wid) prods = prods.filter(p => E.produktMerkmale(mo, p).some(x => x.m.id === mid && x.werte.some(v => v.id === wid)));
     const ziel = K.konf.ziel;
     const krumen = k.gruppe === "fav" ? ["Favoriten"] : ["Katalog", ...(k.gruppe ? pfad(mo, k.gruppe).map(g => g.name) : [])];
-    return `${K.kat.entwurf ? `<div class="hinweis warn" style="margin-bottom:12px"><b>Vorschau des Entwurfs.</b> So sieht der Katalog nach der Freigabe aus. <button class="btn klein" type="button" data-act="katZumBau">Zurück zum Aufbau</button> <a class="btn klein primary" href="#studio-freigabe">Freigeben</a></div>` : ""}${ziel ? `<div class="hinweis" style="margin-bottom:12px">Das konfigurierte Fahrzeug wird als neue Position in <b>${esc(ziel.nr)}</b> übernommen. <button class="btn klein" type="button" data-act="zielAbbrechen">Abbrechen</button></div>` : ""}
+    const offen = !K.kat.entwurf && K.freigabeOffen ? K.freigabeOffen() : 0;
+    const offenHinweis = offen ? `<div class="hinweis" style="margin-bottom:12px"><b>Der Katalog zeigt die freigegebene Version${live()?.version ? " " + live().version : ""}.</b> Im Studio gibt es ${offen === 1 ? "1 Änderung" : offen + " Änderungen"}, die noch nicht freigegeben ${offen === 1 ? "ist" : "sind"}. Erst nach der Freigabe sieht der Vertrieb den Stand aus „Katalog aufbauen“.${K.Store.schreiben ? ` <button class="btn klein" type="button" data-act="katEntwurfZeigen">Entwurf ansehen</button> <a class="btn klein primary" href="#studio-freigabe" data-act="katZurFreigabe">Zur Freigabe</a>` : ""}</div>` : "";
+    return `${offenHinweis}${K.kat.entwurf ? `<div class="hinweis warn" style="margin-bottom:12px"><b>Vorschau des Entwurfs.</b> So sieht der Katalog nach der Freigabe aus. <button class="btn klein" type="button" data-act="katZumBau">Zurück zum Aufbau</button> <a class="btn klein primary" href="#studio-freigabe">Freigeben</a></div>` : ""}${ziel ? `<div class="hinweis" style="margin-bottom:12px">Das konfigurierte Fahrzeug wird als neue Position in <b>${esc(ziel.nr)}</b> übernommen. <button class="btn klein" type="button" data-act="zielAbbrechen">Abbrechen</button></div>` : ""}
     <div class="katalog">
       <nav class="baum panel" aria-label="Produktgruppen">
         <input type="search" id="kat-suche" data-in="katSuche" placeholder="Suche im Katalog" value="${esc(k.suche)}">
@@ -156,6 +158,8 @@
         ${prods.length ? `<div class="kacheln">${prods.map(p => produktKarte(p, mo)).join("")}</div>` : `<div class="leer">In dieser Auswahl gibt es keine Fahrzeuge.</div>`}
       </section></div>`;
   });
+  K.act.katEntwurfZeigen = () => { K.kat.entwurf = true; K.render(); };
+  K.act.katZurFreigabe = () => K.gehe("studio-freigabe");
   K.act.katZumBau = () => { K.kat.entwurf = false; K.gehe("studio-katalog"); };
   K.act.katGruppe = el => { K.kat.gruppe = el.dataset.g; K.render(); };
   K.act.katAuf = el => { K.kat.offen[el.dataset.g] = !(K.kat.offen[el.dataset.g] ?? true); K.render(); };
