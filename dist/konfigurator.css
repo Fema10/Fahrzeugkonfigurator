@@ -1133,3 +1133,45 @@
 #konfigurator .recht-sperre{padding:48px 24px}
 #konfigurator pre.code{background:var(--sunk);border-radius:6px;padding:10px 12px;font:12px/1.5 var(--f-mono,monospace);overflow:auto;white-space:pre}
 #konfigurator .recht-vorschau{margin-bottom:12px}
+/* Erklärungen als (i)-Symbol */
+#konfigurator .tip-quelle{display:none!important}
+#konfigurator .tip-i{display:inline-grid;place-items:center;width:17px;height:17px;margin-left:6px;padding:0;border-radius:50%;border:1.5px solid var(--muted);background:transparent;color:var(--muted);font:700 10.5px/1 Georgia,serif;font-style:italic;cursor:help;vertical-align:2px;flex:none}
+#konfigurator h2 .tip-i{width:20px;height:20px;font-size:12px;vertical-align:4px}
+#konfigurator .tip-i:hover,#konfigurator .tip-i:focus-visible,#konfigurator .tip-i[aria-expanded]{border-color:var(--accent);color:var(--ink);background:var(--accent);outline:none}
+#konfigurator .tip-box{position:fixed;z-index:9999;background:#1E232B;color:#F4F5F7;font-size:12.5px;line-height:1.45;padding:9px 12px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.25);pointer-events:none}
+#konfigurator .tip-box code{color:#FFD200;background:none}
+#konfigurator .tip-box b{color:#fff}
+/* Rechte-Übersicht */
+#konfigurator .rmap-leiste{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-bottom:8px}
+#konfigurator .rmap-legende{color:var(--muted)}
+#konfigurator .rmap-info{min-height:32px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:6px 10px;margin-bottom:8px;background:var(--sunk);border-radius:6px;font-size:13px}
+#konfigurator .rmap-wrap{max-height:70vh;overflow:auto}
+#konfigurator table.rmap{border-collapse:separate;border-spacing:0;font-size:12.5px}
+#konfigurator .rmap th,#konfigurator .rmap td{border-bottom:1px solid var(--line-2,#eee);padding:0}
+#konfigurator .rmap thead th{position:sticky;top:0;background:var(--surface);z-index:2;vertical-align:bottom}
+#konfigurator .rmap tbody th{position:sticky;left:0;background:var(--surface);z-index:1;text-align:left;font-weight:500;min-width:220px}
+#konfigurator .rmap-ecke{left:0;z-index:3!important}
+#konfigurator .rmap button{all:unset;cursor:pointer;display:flex;align-items:center;gap:4px;width:100%;box-sizing:border-box}
+#konfigurator .rmap tbody th button{padding:5px 8px 5px calc(8px + var(--t,0) * 14px)}
+#konfigurator .rmap tr.fz th button{color:var(--muted);font-size:12px}
+#konfigurator .rmap-u button{flex-direction:column;gap:3px;padding:6px 4px;width:44px;justify-content:flex-end}
+#konfigurator .rmap-u span{writing-mode:vertical-rl;transform:rotate(180deg);max-height:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+#konfigurator .rmap-u i{font-style:normal;font-size:10px;font-weight:700;width:16px;height:16px;border-radius:50%;display:grid;place-items:center;background:var(--sunk)}
+#konfigurator .rmap-u i.rolle-admin{background:#1E232B;color:#fff}#konfigurator .rmap-u i.rolle-produkt{background:#2E6FD8;color:#fff}#konfigurator .rmap-u i.rolle-leitung{background:#2E9E5B;color:#fff}#konfigurator .rmap-u i.rolle-vertrieb{background:#FFD200;color:#1E232B}
+#konfigurator .rmap td.rz{width:44px;text-align:center;font-size:14px;line-height:28px}
+#konfigurator .rz.direkt,#konfigurator span.rz.direkt{color:#B08A00}
+#konfigurator .rz.alle{color:#9AA3AE}
+#konfigurator .rz.geerbt,#konfigurator span.rz.geerbt{color:#D2A500}
+#konfigurator .rz.teil,#konfigurator span.rz.teil{color:#C9B46A}
+#konfigurator .rmap tbody tr:hover th,#konfigurator .rmap tbody tr:hover td{background:#FFFBEA}
+#konfigurator .rmap tr.an th,#konfigurator .rmap tr.an td,#konfigurator .rmap td.an,#konfigurator .rmap th.rmap-u.an{background:#FFF3C4!important}
+#konfigurator .rmap.fokus-u td:not(.an),#konfigurator .rmap.fokus-z tr:not(.an) td{opacity:.35}
+#konfigurator .recht-ich{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+#konfigurator .rmap th{text-transform:none;letter-spacing:0;color:var(--ink)}
+#konfigurator .rd{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:-1px}
+#konfigurator .rd.direkt{background:#E0A800}
+#konfigurator .rd.alle{background:#C7CDD4}
+#konfigurator .rd.geerbt{background:linear-gradient(90deg,#E0A800 50%,#F6E3A6 50%)}
+#konfigurator .rd.teil{border:2px solid #E0A800;width:8px;height:8px}
+#konfigurator .rleg{display:inline-flex;gap:5px;align-items:center;margin-right:12px}
+#konfigurator .rmap td.rz{line-height:30px}

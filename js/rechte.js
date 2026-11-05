@@ -94,42 +94,60 @@
   K.render = () => { altRender(); const v = K.el("konf-view"); if (v && R.simuliert && !v.querySelector(".recht-vorschau")) v.insertAdjacentHTML("afterbegin", `<div class="hinweis warn recht-vorschau"><b>Vorschau als ${esc(R.simuliert.login)}</b> (${esc(R.rollenName())}). So sieht dieser Benutzer die App. <button class="btn klein" type="button" data-act="rechtSimEnde">Vorschau beenden</button></div>`); };
   K.act.rechtSimEnde = () => { R.simuliert = null; R.bestimmen(); K.navBauen && K.navBauen(); K.gehe("studio-rechte"); };
 
+  /* ---------- Rechte eines beliebigen Benutzers (für die Übersicht) ---------- */
+  R.fuer = id => {
+    const meine = R.zeilen.filter(z => norm(z.benutzer) === norm(id)); if (!meine.length) return { rolle: "keine", familien: new Set(), fahrzeuge: new Set(), alle: false };
+    const rolle = meine.map(z => z.rolle || "vertrieb").sort((a, b) => ROLLEN[b].stufe - ROLLEN[a].stufe)[0], fam = new Set(), fz = new Set(); let alle = ROLLEN[rolle].alleFahrzeuge;
+    for (const z of meine) { if (z.familie === "*" || norm(z.familie) === "alle") alle = true; else if (z.familie) fam.add(norm(z.familie)); if (z.fahrzeug) fz.add(norm(z.fahrzeug)); }
+    return { rolle, familien: fam, fahrzeuge: fz, alle };
+  };
+  /** Wie sieht ein Benutzer eine Familie/ein Fahrzeug? "alle" (Rolle oder *), "direkt", "geerbt" (über Oberfamilie), "teil" (nur einzelne Fahrzeuge darin), "" */
+  const sicht = (mo, r, art, o) => {
+    if (r.rolle === "keine") return ""; if (r.alle) return "alle";
+    if (art === "p") { if (r.fahrzeuge.has(norm(o.code)) || r.fahrzeuge.has(norm(o.id))) return "direkt"; return E.gruppenPfad(mo, o.gruppe).some(g => r.familien.has(norm(g.name)) || r.familien.has(norm(g.id))) ? "geerbt" : ""; }
+    if (r.familien.has(norm(o.name)) || r.familien.has(norm(o.id))) return "direkt";
+    if (E.gruppenPfad(mo, o.id).slice(0, -1).some(g => r.familien.has(norm(g.name)) || r.familien.has(norm(g.id)))) return "geerbt";
+    return E.familienArtikel(mo, o.id).some(p => sicht(mo, r, "p", p)) ? "teil" : "";
+  };
+  const SYM = { alle: ['<span class="rd alle"></span>', "sieht alles (Rolle oder *)"], direkt: ['<span class="rd direkt"></span>', "zugeordnet"], geerbt: ['<span class="rd geerbt"></span>', "über übergeordnete Familie"], teil: ['<span class="rd teil"></span>', "nur einzelne Fahrzeuge darin"], "": ["", "sieht es nicht"] };
+  K.rmap = { fokusU: null, fokusZ: null, rolle: "", fahrzeuge: false };
+  function karte() {
+    const mo = S().live || S().entwurf; if (!mo) return "";
+    const m = K.rmap, nutzer = [...new Set(R.zeilen.map(z => z.benutzer))].map(id => ({ id, r: R.fuer(id) })).filter(u => !m.rolle || u.r.rolle === m.rolle);
+    const zeilen = [], tiefe = (gid, t) => { for (const g of mo.gruppen.filter(x => (x.eltern || "") === (gid || ""))) { zeilen.push({ art: "g", o: g, t }); tiefe(g.id, t + 1); if (m.fahrzeuge) for (const p of mo.produkte.filter(p => p.gruppe === g.id)) zeilen.push({ art: "p", o: p, t: t + 1 }); } };
+    tiefe("", 0);
+    if (!nutzer.length || !zeilen.length) return `<p class="gedimmt">${!R.zeilen.length ? "Noch keine Zuordnungen aus APplus geladen." : "Keine Benutzer mit dieser Rolle."}</p>`;
+    const fu = m.fokusU, fz = m.fokusZ, zKey = z => z.art + ":" + z.o.id;
+    const info = fu ? (() => { const u = nutzer.find(x => x.id === fu) || { id: fu, r: R.fuer(fu) }, n = zeilen.filter(z => z.art === "g" && sicht(mo, u.r, "g", z.o)).length, pz = mo.produkte.filter(p => sicht(mo, u.r, "p", p)).length;
+        return `<b>${esc(fu)}</b> · ${esc(R.rollenName(u.r.rolle))} · sieht ${u.r.alle ? "alle Fahrzeuge" : `${pz} Fahrzeug${pz === 1 ? "" : "e"} in ${n} Familie${n === 1 ? "" : "n"}`} · Angebote ${ROLLEN[u.r.rolle].alleAngebote ? "alle" : "eigene"}${ROLLEN[u.r.rolle].studio ? " · Studio" : ""} <button class="btn klein" type="button" data-act="rechtSim" data-u="${esc(fu)}">Ansicht testen</button>`; })()
+      : fz ? (() => { const z = zeilen.find(x => zKey(x) === fz); if (!z) return ""; const wer = nutzer.filter(u => sicht(mo, u.r, z.art, z.o)); return `<b>${esc(z.o.name)}</b> sehen ${wer.length} von ${nutzer.length}: ${wer.map(u => esc(u.id)).join(", ") || "niemand"}`; })()
+      : `<span class="gedimmt">Benutzer oder Familie anklicken</span>`;
+    return `<div class="rmap-leiste"><div class="segment">${[["", "Alle"], ["admin", "Admin"], ["produkt", "Produkt"], ["leitung", "Leitung"], ["vertrieb", "Vertrieb"]].map(([k, n]) => `<button type="button" data-act="rmapRolle" data-r="${k}" aria-pressed="${m.rolle === k}">${n}</button>`).join("")}</div>
+        <label class="haken klein"><input type="checkbox" data-act="rmapFz" ${m.fahrzeuge ? "checked" : ""}> Fahrzeuge</label>
+        <span class="rmap-legende klein">${["direkt", "geerbt", "teil", "alle"].map(k => `<span class="rleg">${SYM[k][0]} ${k === "alle" ? "alles über Rolle" : SYM[k][1]}</span>`).join("")}</span></div>
+      <div class="rmap-info" aria-live="polite">${info}</div>
+      <div class="tabwrap rmap-wrap"><table class="rmap${fu ? " fokus-u" : ""}${fz ? " fokus-z" : ""}"><thead><tr><th class="rmap-ecke"></th>${nutzer.map(u => `<th class="rmap-u${u.id === fu ? " an" : ""}"><button type="button" data-act="rmapU" data-u="${esc(u.id)}" title="${esc(u.id)} · ${esc(R.rollenName(u.r.rolle))}"><span>${esc(u.id)}</span><i class="rolle-${u.r.rolle}">${esc(R.rollenName(u.r.rolle).slice(0, 1))}</i></button></th>`).join("")}</tr></thead>
+        <tbody>${zeilen.map(z => `<tr class="${zKey(z) === fz ? "an" : ""} ${z.art === "p" ? "fz" : ""}"><th style="--t:${z.t}"><button type="button" data-act="rmapZ" data-z="${zKey(z)}">${z.art === "g" ? "▤" : "▢"} ${esc(z.o.name)}</button></th>
+          ${nutzer.map(u => { const v = sicht(mo, u.r, z.art, z.o); return `<td class="${u.id === fu ? "an " : ""}rz ${v}" title="${esc(u.id)} · ${esc(z.o.name)}: ${SYM[v][1]}">${SYM[v][0]}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>`;
+  }
+  K.act.rmapU = el => { K.rmap.fokusU = K.rmap.fokusU === el.dataset.u ? null : el.dataset.u; K.rmap.fokusZ = null; K.render(); };
+  K.act.rmapZ = el => { K.rmap.fokusZ = K.rmap.fokusZ === el.dataset.z ? null : el.dataset.z; K.rmap.fokusU = null; K.render(); };
+  K.act.rmapRolle = el => { K.rmap.rolle = el.dataset.r; K.render(); };
+  K.act.rmapFz = el => { K.rmap.fahrzeuge = el.checked; K.render(); };
+
   /* ---------- Studio › Rechte ---------- */
   K.route("studio-rechte", () => {
     const St = K.studio, bz = K.Store.benutzerZeilen, wer = R.benutzer, qs = K.Store.abfragen(), st = K.Store.abfrageStatus || {};
-    const zeile = (t, w) => `<tr><th>${t}</th><td>${w}</td></tr>`;
-    const famName = n => { const g = (S().live || S().entwurf)?.gruppen.find(x => norm(x.name) === n || norm(x.id) === n); return g ? esc(g.name) : `<span class="warntext" title="Keine Familie mit diesem Namen">${esc(n)}</span>`; };
-    const nutzer = [...new Set(R.zeilen.map(z => z.benutzer))];
-    return St.kopf("Rechte", "Wer was sieht, kommt aus APplus: eine Abfrage erkennt den angemeldeten Benutzer, eine zweite ordnet Rollen und Familien zu. Ohne Rechte-Abfrage gibt es keine Einschränkung.") + `
-      <div class="recht-raster">
-      <section class="panel"><h3>Angemeldet</h3><table class="kompakt recht-info"><tbody>
-        ${zeile("Benutzer", wer ? `<b>${esc(wer.name || "–")}</b> · ${esc(wer.login || "–")}${wer.personal ? ` · Pers.-Nr. ${esc(wer.personal)}` : ""}${wer.mehrdeutig ? ` <span class="warntext">Abfrage liefert ${bz.length} Zeilen, verwendet wird die erste</span>` : ""}` : `<span class="warntext">nicht erkannt</span> (${esc(st.benutzer?.fehler || (qs.benutzer ? "Abfrage " + qs.benutzer + " nicht geladen" : "keine Abfrage"))})`)}
-        ${zeile("Rechte-Abfrage", R.aktiv ? `<code>${esc(qs.rechte)}</code> · ${R.zeilen.length} Zuordnungen` : `<span class="gedimmt">nicht geladen${st.rechte?.fehler ? ": " + esc(st.rechte.fehler) : ""}, daher keine Einschränkung</span>`)}
-        ${zeile("Rolle", `<b>${esc(R.rollenName())}</b>${R.simuliert ? ` <span class="chip">Vorschau als ${esc(R.simuliert.login)}</span>` : ""}`)}
-        ${zeile("Sieht", R.familien || R.fahrzeuge ? [...[...(R.familien || [])].map(famName), ...[...(R.fahrzeuge || [])].map(x => `<code>${esc(x)}</code>`)].join(", ") || "keine Fahrzeuge" : "alle Fahrzeuge")}
-        ${zeile("Angebote", R.darf("alleAngebote") || !R.aktiv ? "alle" : "nur eigene" + (R.meinVertrieb() ? ` (als ${esc(R.meinVertrieb().name)})` : ` <span class="warntext">kein passender Eintrag im Vertrieb gefunden</span>`))}
-        ${R.meldung ? zeile("Hinweis", `<span class="warntext">${esc(R.meldung)}</span>`) : ""}
-      </tbody></table>
-      ${nutzer.length ? `<div class="feld" style="margin-top:12px"><label for="recht-sim">Ansicht testen als</label><select id="recht-sim" data-act="rechtSim"><option value="">– ich selbst –</option>${nutzer.map(n => `<option ${R.simuliert?.login === n ? "selected" : ""}>${esc(n)}</option>`).join("")}</select><span class="klein gedimmt">Zeigt die App so, wie dieser Benutzer sie sieht, bis zum Neuladen.</span></div>` : ""}</section>
-      <section class="panel"><h3>Rollen</h3><div class="tabwrap ohne-rand"><table class="kompakt"><thead><tr><th>Rolle</th><th>Studio</th><th>Fahrzeuge</th><th>Angebote</th><th>Einstellungen</th></tr></thead><tbody>
-        ${["admin", "produkt", "leitung", "vertrieb"].map(k => { const r = ROLLEN[k]; return `<tr><td><b>${r.name}</b></td><td>${r.studio ? "ja" : "–"}</td><td>${r.alleFahrzeuge ? "alle" : "zugeordnete"}</td><td>${r.alleAngebote ? "alle" : "eigene"}</td><td>${r.einstellungen ? "ja" : "–"}</td></tr>`; }).join("")}</tbody></table></div>
-        <p class="klein gedimmt">Hat ein Benutzer mehrere Zeilen, gilt die höchste Rolle; Familien und Fahrzeuge werden zusammengezählt. Familien gelten mit allen Unterfamilien.</p></section>
-      </div>
-      <section class="panel"><h3>Zuordnungen aus APplus</h3>${R.zeilen.length ? `<div class="tabwrap"><table class="kompakt"><thead><tr><th>Benutzer</th><th>Rolle</th><th>Familie</th><th>Fahrzeug</th></tr></thead><tbody>
-        ${R.zeilen.map(z => `<tr><td class="mono">${esc(z.benutzer)}</td><td>${z.rolle ? esc(R.rollenName(z.rolle)) : `<span class="warntext">unbekannt, gilt als Vertrieb</span>`}</td><td>${z.familie ? (z.familie === "*" ? "alle" : famName(norm(z.familie))) : ""}</td><td class="mono">${esc(z.fahrzeug)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="gedimmt">Keine Zuordnungen geladen.</p>`}</section>
-      <section class="panel"><h3>Einrichtung in APplus</h3>
-        <p class="klein">1. Abfrage <code>apx_Benutzer</code>: liefert <b>genau eine Zeile</b> zum angemeldeten Benutzer. Wie APplus den angemeldeten Benutzer in eine Abfrage gibt (Platzhalter oder Funktion), weiß Ihre APplus-Betreuung. Beispiel mit Platzhalter:</p>
-        <pre class="code">SELECT BENUTZER, PERSONAL, NAME, EMAIL
-FROM   PERSONAL            -- bzw. Ihre Benutzer-/Personaltabelle
-WHERE  BENUTZER = &lt;angemeldeter Benutzer&gt;</pre>
-        <p class="klein">2. Abfrage <code>apx_Rechte</code>: eine Zeile je Zuordnung. Pflege z. B. in einer kleinen Tabelle oder über vorhandene Rollen/Gruppen:</p>
-        <pre class="code">SELECT BENUTZER, ROLLE, FAMILIE, FAHRZEUG FROM KONF_RECHTE
--- BENUTZER  Login oder Personalnummer
--- ROLLE     Administrator | Produktmanagement | Vertriebsleitung | Vertrieb
--- FAMILIE   Name der Familie aus „Katalog aufbauen“, * = alle
--- FAHRZEUG  Artikelnummer (optional, einzelnes Fahrzeug)</pre>
-        <p class="klein">3. Beide Abfragen dem Dashboard zuordnen. Heißen sie anders, unter Einstellungen › APplus-Abfragen eintragen.</p>
-        <p class="hinweis klein">Die Prüfung läuft im Browser und steuert die Anzeige. Wer technisch versiert ist, kann sie umgehen. Echte Sperren gehören zusätzlich in die APplus-Abfragen selbst (z. B. Angebote nur des angemeldeten Benutzers ausliefern).</p></section>`;
+    const rollenTip = ["admin", "produkt", "leitung", "vertrieb"].map(k => { const r = ROLLEN[k]; return `${r.name}: ${r.studio ? "Studio, " : ""}${r.alleFahrzeuge ? "alle" : "zugeordnete"} Fahrzeuge, ${r.alleAngebote ? "alle" : "eigene"} Angebote${r.einstellungen ? ", Einstellungen und Rechte" : ""}`; }).join(" · ");
+    const einrichtung = `apx_Benutzer: genau eine Zeile zum angemeldeten Benutzer (BENUTZER, PERSONAL, NAME, EMAIL). · apx_Rechte: eine Zeile je Zuordnung (BENUTZER = Login oder Personalnummer, ROLLE, FAMILIE = Name aus Katalog aufbauen oder *, FAHRZEUG = Artikelnummer). · Andere Namen unter Einstellungen › APplus-Abfragen. · Die Prüfung steuert die Anzeige im Browser, echte Sperren gehören zusätzlich in die Abfragen.`;
+    return St.kopf("Rechte", "") + `
+      <section class="panel rmap-panel"><div class="panelkopf"><h3>Wer sieht was ${K.tip("Spalten = Benutzer, Zeilen = Familien aus dem Katalog. Anklicken zeigt Details. Mehrere Zeilen je Benutzer werden zusammengezählt, die höchste Rolle gilt, Familien gelten mit Unterfamilien.")}</h3>
+        <span class="row klein">${K.tip(rollenTip, "Rollen")} Rollen ${K.tip(einrichtung, "Einrichtung")} Einrichtung</span></div>${karte()}</section>
+      <section class="panel"><h3>Angemeldet</h3><div class="recht-ich">
+        <span>${wer ? `<b>${esc(wer.name || wer.login || "–")}</b> <code>${esc(wer.login || wer.personal || "")}</code>` : `<span class="warntext">Benutzer nicht erkannt</span> ${K.tip(st.benutzer?.fehler || (qs.benutzer ? "Abfrage " + qs.benutzer + " nicht geladen" : "Keine Benutzer-Abfrage"))}`}${wer?.mehrdeutig ? ` <span class="warntext">${bz.length} Zeilen</span>${K.tip("Die Benutzer-Abfrage soll genau eine Zeile liefern, verwendet wird die erste.")}` : ""}</span>
+        <span class="chip">${esc(R.rollenName())}</span>
+        <span class="klein">${R.aktiv ? `<code>${esc(qs.rechte)}</code> · ${R.zeilen.length} Zuordnungen` : `<span class="gedimmt">keine Rechte-Abfrage, keine Einschränkung</span>`}</span>
+        ${R.meldung ? `<span class="warntext klein">${esc(R.meldung)}</span>` : ""}</div></section>`;
   });
-  K.act.rechtSim = el => { const n = el.value; R.simuliert = n ? { login: n, personal: n, name: n } : null; R.bestimmen(); K.navBauen && K.navBauen(); K.render(); K.toast(n ? `Vorschau als ${n}: ${R.rollenName()}` : "Eigene Ansicht"); };
+  K.act.rechtSim = el => { const n = el.dataset.u || el.value; R.simuliert = n ? { login: n, personal: n, name: n } : null; R.bestimmen(); K.navBauen && K.navBauen(); K.render(); K.toast(n ? `Vorschau als ${n}: ${R.rollenName()}` : "Eigene Ansicht"); };
 })();
