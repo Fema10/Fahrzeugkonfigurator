@@ -31,7 +31,7 @@
      Übersicht
      ===================================================================== */
   K.route("start", () => {
-    const A = S().angebote, offen = A.filter(a => a.status === "entwurf" || a.status === "versendet");
+    const A = K.angeboteSichtbar(), offen = A.filter(a => a.status === "entwurf" || a.status === "versendet");
     const sum = a => E.summen(a, S().einst.mwst).netto;
     const woche = A.reduce((n, a) => n + K.aufrufe(a).filter(e => Date.now() - e.ts < 7 * 864e5).length, 0);
     const entsch = A.filter(a => a.status === "angenommen" || a.status === "abgelehnt");
@@ -116,7 +116,7 @@
       </div></article>`;
   }
   function baum(mo, gid, tiefe) {
-    const zahl = id => mo.produkte.filter(p => p.aktiv !== false && nachfahren(mo, id).includes(p.gruppe)).length;
+    const zahl = id => mo.produkte.filter(p => p.aktiv !== false && K.produktSichtbar(mo, p) && nachfahren(mo, id).includes(p.gruppe)).length;
     return kinder(mo, gid).filter(g => zahl(g.id) > 0).map(g => {
       const hatKinder = kinder(mo, g.id).some(k => zahl(k.id) > 0), offen = K.kat.offen[g.id] ?? true, aktiv = K.kat.gruppe === g.id;
       const anzahl = zahl(g.id);
@@ -130,7 +130,7 @@
     const mo = K.kat.entwurf ? S().entwurf : live(); if (!mo) return keinModell();
     const k = K.kat, q = k.suche.toLowerCase(), fav = S().prefs.favoriten || [];
     const imBaum = k.gruppe === "fav" ? null : k.gruppe ? nachfahren(mo, k.gruppe) : null;
-    let prods = mo.produkte.filter(p => p.aktiv !== false)
+    let prods = mo.produkte.filter(p => p.aktiv !== false && K.produktSichtbar(mo, p))
       .filter(p => k.gruppe === "fav" ? fav.includes(p.id) : !imBaum || imBaum.includes(p.gruppe))
       .filter(p => !q || (p.name + " " + p.beschreibung + " " + (p.artnr || "") + " " + (p.code || "")).toLowerCase().includes(q));
     // Katalogfilter aus Merkmalen mit "katalogfilter" (z. B. Anzahl Achsen)
@@ -148,7 +148,7 @@
     <div class="katalog">
       <nav class="baum panel" aria-label="Produktgruppen">
         <input type="search" id="kat-suche" data-in="katSuche" placeholder="Suche im Katalog" value="${esc(k.suche)}">
-        <ul><li><div class="baum-zeile${!k.gruppe ? " aktiv" : ""}" style="--tiefe:0"><span class="baum-auf"></span><button type="button" class="baum-name" data-act="katGruppe" data-g="">Gesamter Katalog<span class="gedimmt klein">${mo.produkte.filter(p => p.aktiv !== false).length}</span></button></div>
+        <ul><li><div class="baum-zeile${!k.gruppe ? " aktiv" : ""}" style="--tiefe:0"><span class="baum-auf"></span><button type="button" class="baum-name" data-act="katGruppe" data-g="">Gesamter Katalog<span class="gedimmt klein">${mo.produkte.filter(p => p.aktiv !== false && K.produktSichtbar(mo, p)).length}</span></button></div>
           <ul>${baum(mo, "", 1)}</ul></li>
           <li><div class="baum-zeile${k.gruppe === "fav" ? " aktiv" : ""}" style="--tiefe:0"><span class="baum-auf"></span><button type="button" class="baum-name" data-act="katGruppe" data-g="fav">★ Favoriten<span class="gedimmt klein">${fav.length}</span></button></div></li></ul>
       </nav>
@@ -206,6 +206,7 @@
   };
   K.konfigOeffnen = (pid, sel, ziel, entwurf) => {
     const mo = entwurf ? S().entwurf : live(), p = E.produkt(mo, pid); if (!p) { K.toast("Dieses Fahrzeug gibt es im Modell nicht mehr."); return; }
+    if (!entwurf && !K.produktSichtbar(mo, p)) { K.toast("Dieses Fahrzeug ist für Sie nicht freigegeben."); return; }
     const s = K.clone(sel || {}); const notes = E.bereinige(mo, p, s);
     Object.assign(K.konf, { produkt: pid, sel: s, notes, ziel, tab: "Grundmaschine", entwurf: !!entwurf });
     K.gehe("konfig");
@@ -316,7 +317,7 @@
             <span class="row">${foto ? `<button class="btn klein" type="button" data-act="konfAnsicht">${k.zeige3d ? "Foto" : "3D-Ansicht"}</button>` : ""}<span class="nur3d row"><button class="btn klein" type="button" data-act="export3d" data-f="png">Bild speichern</button><button class="btn klein" type="button" data-act="export3d" data-f="glb">3D-Szene exportieren</button></span></span></div></div>
         <details class="panel regeln"><summary>Aktive Regeln (${regeln.length})</summary>
           <ul class="regelliste">${regeln.map(r => `<li><span class="mono">${r.id}</span><span>${esc(r.hinweis || E.satz(mo, r))}</span></li>`).join("") || "<li><span></span><span>Keine Einschränkungen aktiv.</span></li>"}</ul></details>
-        <div class="row"><button class="btn klein" type="button" data-act="konfReset">Auswahl zurücksetzen</button><select id="konf-produkt" data-act="konfProdukt" aria-label="Grundfahrzeug wechseln">${mo.produkte.filter(x => x.aktiv !== false).map(x => `<option value="${x.id}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div>
+        <div class="row"><button class="btn klein" type="button" data-act="konfReset">Auswahl zurücksetzen</button><select id="konf-produkt" data-act="konfProdukt" aria-label="Grundfahrzeug wechseln">${mo.produkte.filter(x => x.aktiv !== false && K.produktSichtbar(mo, x)).map(x => `<option value="${x.id}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div>
       </aside></div>`;
   });
   K.act.konfTab = el => { K.konf.tab = el.dataset.t; K.render(); };
@@ -363,7 +364,7 @@
       else a.positionen.push(neu);
       K.Store.angebotSpeichern(a); const nr = a.nr; k.ziel = null; K.toast("Position übernommen"); K.gehe("angebot-" + nr); return;
     }
-    const offen = S().angebote.filter(a => a.status === "entwurf").sort((x, y) => y.erstellt - x.erstellt);
+    const offen = K.angeboteSichtbar().filter(a => a.status === "entwurf").sort((x, y) => y.erstellt - x.erstellt);
     K.sheet(`<h3>In Angebot übernehmen</h3>
       <div class="feld"><label for="ua-kunde">Neues Angebot für</label><select id="ua-kunde">${kundenOptionen()}</select></div>
       <div class="row"><button class="btn primary" type="button" data-act="uebernehmenNeu">Neues Angebot anlegen</button></div>
@@ -384,7 +385,7 @@
     const nr = num.nr; if (num.quelle === "ersatz") K.toast("APplus hat keine Nummer geliefert, vorläufige Nummer " + nr + " vergeben.");
     const ich = K.Store.meinVertrieb || e.vertrieb[0]?.id;
     const a = { nr, kundeId: kid, kunde: k ? { firma: k.firma, person: k.person, strasse: k.strasse, ort: k.ort, mail: k.mail } : { firma: "", person: "", strasse: "", ort: "" },
-      bearbeiter: ich, erstellt: Date.now(), gueltig: Date.now() + e.gueltigTage * 864e5, status: "entwurf", positionen: [], rabatt: 0,
+      bearbeiter: ich, erstelltVon: K.Rechte?.benutzer?.login || K.Rechte?.benutzer?.personal || "", erstellt: Date.now(), gueltig: Date.now() + e.gueltigTage * 864e5, status: "entwurf", positionen: [], rabatt: 0,
       texte: { einleitung: e.vorlage.einleitung, lieferung: e.vorlage.lieferung, zahlung: e.vorlage.zahlung, gewaehrleistung: e.vorlage.gewaehrleistung, schluss: e.vorlage.schluss },
       token: null, freigegeben: false, events: [], nrQuelle: num.quelle, kundeNr: k?.nr || "" };
     { const b = (e.vertrieb || []).find(v => v.id === ich); if (b) a.bearbeiterInfo = { name: b.name, tel: b.tel, mail: b.mail, nr: b.nr || "" }; }
@@ -401,13 +402,13 @@
   K.ang = { status: "alle", suche: "" };
   K.route("angebote", () => {
     const f = K.ang, q = f.suche.toLowerCase();
-    const liste = [...S().angebote].sort((a, b) => b.erstellt - a.erstellt)
+    const liste = [...K.angeboteSichtbar()].sort((a, b) => b.erstellt - a.erstellt)
       .filter(a => f.status === "alle" || (f.status === "heiss" ? K.heiss(a) : a.status === f.status))
       .filter(a => !q || (a.nr + " " + a.kunde.firma + " " + a.positionen.map(p => p.produktName || p.text).join(" ")).toLowerCase().includes(q));
-    const zahl = s => S().angebote.filter(a => s === "heiss" ? K.heiss(a) : a.status === s).length;
+    const zahl = s => K.angeboteSichtbar().filter(a => s === "heiss" ? K.heiss(a) : a.status === s).length;
     return kopf("Vertrieb", "Angebote", "", `<button class="btn primary" type="button" data-act="angebotNeu">Neues Angebot</button>`) + `
       <div class="filterleiste"><div class="segment" role="group" aria-label="Status">
-        ${[["alle", "Alle", S().angebote.length], ["heiss", "Heiß", zahl("heiss")], ...Object.entries(STATUS).map(([k, v]) => [k, v, zahl(k)])].map(([id, n, c]) => `<button type="button" data-act="angStatus" data-s="${id}" aria-pressed="${f.status === id}">${n} <span class="zaehler">${c}</span></button>`).join("")}
+        ${[["alle", "Alle", K.angeboteSichtbar().length], ["heiss", "Heiß", zahl("heiss")], ...Object.entries(STATUS).map(([k, v]) => [k, v, zahl(k)])].map(([id, n, c]) => `<button type="button" data-act="angStatus" data-s="${id}" aria-pressed="${f.status === id}">${n} <span class="zaehler">${c}</span></button>`).join("")}
       </div><input type="search" id="ang-suche" data-in="angSuche" placeholder="Nummer, Kunde oder Fahrzeug" value="${esc(f.suche)}"></div>
       ${angebotsTabelle(liste)}`;
   });
@@ -554,7 +555,7 @@
     return kopf("Vertrieb", "Kunden", "", `<a class="btn primary" href="#kunde-neu">Neuer Kunde</a>`) + `
       <div class="filterleiste"><input type="search" id="kd-suche" data-in="kdSuche" placeholder="Firma, Ort, Ansprechpartner oder Kundennummer" value="${esc(K.kd.suche)}"></div>
       ${liste.length ? `<div class="tabwrap"><table class="klickbar"><thead><tr><th>Nr.</th><th>Firma</th><th>Ansprechpartner</th><th>Ort</th><th class="r">Angebote</th><th class="r">Volumen netto</th></tr></thead><tbody>
-      ${liste.map(k => { const as = S().angebote.filter(a => a.kundeId === k.id); return `<tr data-act="oeffne" data-ziel="kunde-${k.id}" tabindex="0"><td class="mono">${esc(k.nr)}</td><td><b>${esc(k.firma)}</b></td><td>${esc(k.person)}</td><td class="gedimmt">${esc(k.ort)}</td><td class="r num">${as.length}</td><td class="r num">${K.eur(as.reduce((n, a) => n + E.summen(a, S().einst.mwst).netto, 0))}</td></tr>`; }).join("")}
+      ${liste.map(k => { const as = K.angeboteSichtbar().filter(a => a.kundeId === k.id); return `<tr data-act="oeffne" data-ziel="kunde-${k.id}" tabindex="0"><td class="mono">${esc(k.nr)}</td><td><b>${esc(k.firma)}</b></td><td>${esc(k.person)}</td><td class="gedimmt">${esc(k.ort)}</td><td class="r num">${as.length}</td><td class="r num">${K.eur(as.reduce((n, a) => n + E.summen(a, S().einst.mwst).netto, 0))}</td></tr>`; }).join("")}
       </tbody></table></div>` : `<div class="leer">Keine Kunden gefunden.</div>`}`;
   });
   K.inp.kdSuche = el => { K.kd.suche = el.value; K.render(); };
@@ -563,7 +564,7 @@
     const neu = id === "neu";
     let k = neu ? (K.kdEntwurf ||= { id: K.id("k"), nr: String(10000 + Math.floor(Math.random() * 9000)), firma: "", person: "", strasse: "", ort: "", land: "DE", mail: "", tel: "", notiz: "" }) : S().kunden.find(x => x.id === id);
     if (!k) return `<div class="leer">Kunde nicht gefunden.</div>`;
-    const as = S().angebote.filter(a => a.kundeId === k.id).sort((a, b) => b.erstellt - a.erstellt);
+    const as = K.angeboteSichtbar().filter(a => a.kundeId === k.id).sort((a, b) => b.erstellt - a.erstellt);
     const f = (key, l, typ = "text", breit) => `<div class="feld${breit ? " breit" : ""}"><label for="kd-${key}">${l}</label><input id="kd-${key}" type="${typ}" data-in="kdFeld" data-k="${key}" data-id="${neu ? "neu" : k.id}" value="${esc(k[key])}" ${K.Store.schreiben ? "" : "disabled"}></div>`;
     return kopf("Kunde", neu ? "Neuer Kunde" : esc(k.firma), "", neu ? `<button class="btn primary" type="button" data-act="kdAnlegen">Kunde anlegen</button>` : `<button class="btn" type="button" data-act="kdAngebot" data-id="${k.id}">Neues Angebot</button><button class="btn gefahr-text" type="button" data-act="kdLoeschen" data-id="${k.id}">Löschen</button>`) + `
       <section class="panel"><div class="formgitter">${f("firma", "Firma", "text", true)}${f("nr", "Kundennummer")}${f("person", "Ansprechpartner")}${f("strasse", "Straße")}${f("ort", "PLZ und Ort")}${f("mail", "E-Mail", "email")}${f("tel", "Telefon", "tel")}

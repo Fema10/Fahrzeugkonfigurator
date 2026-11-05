@@ -15,7 +15,7 @@
     hash: !!(window.claude && window.claude.use),
     storageKey: "konf-v1",
     /** APplus-Abfragen. Leer lassen = Beispieldaten. Format siehe LIESMICH. */
-    queries: { codes: "", produkte: "", merkmale: "", regeln: "", katalog: "", stueckliste: "", kunden: "", artikel: "", vertrieb: "", angebotsnummer: "" },
+    queries: { codes: "", produkte: "", merkmale: "", regeln: "", katalog: "", stueckliste: "", kunden: "", artikel: "", vertrieb: "", angebotsnummer: "", benutzer: "", rechte: "" },
     /** Optional: eigene Funktion, die eine Angebotsnummer im ERP reserviert, z. B. über einen Webdienst.
         async (einst) => "AN-2026-01234"  – hat Vorrang vor der Abfrage. */
     angebotsnummer: null,

@@ -1,4 +1,4 @@
-/* Fahrzeugkonfigurator 2026-11-04 */
+/* Fahrzeugkonfigurator 2026-11-05 */
 @import url("https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
 /* =====================================================================
    Fahrzeugkonfigurator – Stile
@@ -1126,3 +1126,10 @@
 #konfigurator .kb-zeile.kb-weg{cursor:default;opacity:.85}#konfigurator .kb-zeile.kb-weg .kb-nm{color:var(--muted)}
 #konfigurator .kachel-weg{display:inline-block;margin-top:4px;font-size:11px;font-weight:600;color:var(--bad);background:#FDECEA;border-radius:8px;padding:1px 7px}
 #konfigurator .kb-nurkat{margin-bottom:12px}
+/* Rechte */
+#konfigurator .recht-raster{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:900px){#konfigurator .recht-raster{grid-template-columns:1fr}}
+#konfigurator .recht-info th{width:9em;text-align:left;color:var(--muted);font-weight:500}
+#konfigurator .recht-sperre{padding:48px 24px}
+#konfigurator pre.code{background:var(--sunk);border-radius:6px;padding:10px 12px;font:12px/1.5 var(--f-mono,monospace);overflow:auto;white-space:pre}
+#konfigurator .recht-vorschau{margin-bottom:12px}

@@ -66,9 +66,13 @@
       const aus = Object.assign({}, (K.cfg && K.cfg.queries) || {});
       let e = this.S && this.S.einst; if (!e) try { e = (JSON.parse(localStorage.getItem(this._schluessel()) || "null") || {}).einst; } catch (x) { e = null; }
       for (const [k, v] of Object.entries((e && e.abfragen) || {})) if (v != null && String(v).trim() !== "") aus[k] = String(v).trim();
+      if (location.protocol !== "file:") for (const [k, v] of Object.entries(this.STANDARD_ABFRAGEN)) if (!aus[k]) aus[k] = v;
       return aus;
     },
     abfrageStatus: {},
+    /** Vorgabe-Namen: wenn nichts eingetragen ist, wird es mit diesen Abfragen versucht (Fehler dann ohne Meldung) */
+    STANDARD_ABFRAGEN: { benutzer: "apx_Benutzer", rechte: "apx_Rechte" },
+    _standardAbfrage(typ, name) { return this.STANDARD_ABFRAGEN[typ] === name && !((K.cfg.queries || {})[typ]) && !(((this.S && this.S.einst) || {}).abfragen || {})[typ]; },
     async ladeLokal() {
       const S = this.S; let gespeichert = null;
       if (this._lokalTimer && S.geladen) this._lokalSchreiben(); // noch offene Änderungen zuerst sichern
@@ -84,6 +88,7 @@
       }
       if (q.kunden) S.kunden = q.kunden;
       if (q.vertrieb && q.vertrieb.length) { S.einst ||= d.einstellungen; S.einst.vertrieb = q.vertrieb; S.einst.vertriebQuelle = "applus"; }
+      this.benutzerZeilen = q.benutzer || null; this.rechteZeilen = q.rechte || null;
       const ex = q.artikel ? null : this._artikelAusExcel();
       this.artikelSetzen(q.artikel || ex || d.artikel || [], q.artikel ? "applus" : ex && ex.length ? "excel" : "beispiel");
       if (q.artikel) try { this.stammAnwenden(); } catch (e) { console.warn("[Konfigurator] Stammabgleich mit ARTIKEL übersprungen:", e); }
@@ -95,7 +100,7 @@
       const out = {}, cfg = K.cfg || {}, qs = this.abfragen(); this.ladefehler = []; this.applusQuellen = 0; this.abfrageStatus = {};
       if (!cfg.loadQuery) return out;
       const blaetter = {};
-      await Promise.all(["katalog", "produkte", "merkmale", "codes", "regeln", "stueckliste", "kunden", "artikel", "vertrieb"].map(async typ => {
+      await Promise.all(["katalog", "produkte", "merkmale", "codes", "regeln", "stueckliste", "kunden", "artikel", "vertrieb", "benutzer", "rechte"].map(async typ => {
         if (!qs[typ]) return;
         try {
           const rows = await cfg.loadQuery(qs[typ], typ);
@@ -105,9 +110,10 @@
           if (typ === "kunden") { out.kunden = rows.map(kundeAusZeile).filter(k => k.firma); return; }
           if (typ === "vertrieb") { out.vertrieb = rows.map(vertriebAusZeile).filter(v => v.name); return; }
           if (typ === "artikel") { out.artikel = rows; return; }
+          if (typ === "benutzer" || typ === "rechte") { out[typ] = rows; return; }
           const kopf = [...new Set(rows.flatMap(r => Object.keys(r)))];
           blaetter[typ] = [kopf, ...rows.map(r => kopf.map(h => r[h] ?? ""))];
-        } catch (e) { console.warn("[Konfigurator] Abfrage fehlgeschlagen:", qs[typ], e); this.ladefehler.push(qs[typ] + ": " + (e.message || e)); this.abfrageStatus[typ] = { name: qs[typ], fehler: e.message || String(e) }; }
+        } catch (e) { console.warn("[Konfigurator] Abfrage fehlgeschlagen:", qs[typ], e); if (!this._standardAbfrage(typ, qs[typ])) this.ladefehler.push(qs[typ] + ": " + (e.message || e)); this.abfrageStatus[typ] = { name: qs[typ], fehler: e.message || String(e) }; }
       }));
       if (Object.keys(blaetter).length && K.X) {
         const zuo = K.X.zuordnungVorschlagen(blaetter, (this.S.einst || {}).importZuordnung);

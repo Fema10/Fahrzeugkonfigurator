@@ -1128,6 +1128,13 @@
 #konfigurator .kb-zeile.kb-weg{cursor:default;opacity:.85}#konfigurator .kb-zeile.kb-weg .kb-nm{color:var(--muted)}
 #konfigurator .kachel-weg{display:inline-block;margin-top:4px;font-size:11px;font-weight:600;color:var(--bad);background:#FDECEA;border-radius:8px;padding:1px 7px}
 #konfigurator .kb-nurkat{margin-bottom:12px}
+/* Rechte */
+#konfigurator .recht-raster{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:900px){#konfigurator .recht-raster{grid-template-columns:1fr}}
+#konfigurator .recht-info th{width:9em;text-align:left;color:var(--muted);font-weight:500}
+#konfigurator .recht-sperre{padding:48px 24px}
+#konfigurator pre.code{background:var(--sunk);border-radius:6px;padding:10px 12px;font:12px/1.5 var(--f-mono,monospace);overflow:auto;white-space:pre}
+#konfigurator .recht-vorschau{margin-bottom:12px}
 
 </style>
 
@@ -4361,7 +4368,7 @@
     hash: !!(window.claude && window.claude.use),
     storageKey: "konf-v1",
     /** APplus-Abfragen. Leer lassen = Beispieldaten. Format siehe LIESMICH. */
-    queries: { codes: "", produkte: "", merkmale: "", regeln: "", katalog: "", stueckliste: "", kunden: "", artikel: "", vertrieb: "", angebotsnummer: "" },
+    queries: { codes: "", produkte: "", merkmale: "", regeln: "", katalog: "", stueckliste: "", kunden: "", artikel: "", vertrieb: "", angebotsnummer: "", benutzer: "", rechte: "" },
     /** Optional: eigene Funktion, die eine Angebotsnummer im ERP reserviert, z. B. über einen Webdienst.
         async (einst) => "AN-2026-01234"  – hat Vorrang vor der Abfrage. */
     angebotsnummer: null,
@@ -5061,9 +5068,13 @@
       const aus = Object.assign({}, (K.cfg && K.cfg.queries) || {});
       let e = this.S && this.S.einst; if (!e) try { e = (JSON.parse(localStorage.getItem(this._schluessel()) || "null") || {}).einst; } catch (x) { e = null; }
       for (const [k, v] of Object.entries((e && e.abfragen) || {})) if (v != null && String(v).trim() !== "") aus[k] = String(v).trim();
+      if (location.protocol !== "file:") for (const [k, v] of Object.entries(this.STANDARD_ABFRAGEN)) if (!aus[k]) aus[k] = v;
       return aus;
     },
     abfrageStatus: {},
+    /** Vorgabe-Namen: wenn nichts eingetragen ist, wird es mit diesen Abfragen versucht (Fehler dann ohne Meldung) */
+    STANDARD_ABFRAGEN: { benutzer: "apx_Benutzer", rechte: "apx_Rechte" },
+    _standardAbfrage(typ, name) { return this.STANDARD_ABFRAGEN[typ] === name && !((K.cfg.queries || {})[typ]) && !(((this.S && this.S.einst) || {}).abfragen || {})[typ]; },
     async ladeLokal() {
       const S = this.S; let gespeichert = null;
       if (this._lokalTimer && S.geladen) this._lokalSchreiben(); // noch offene Änderungen zuerst sichern
@@ -5079,6 +5090,7 @@
       }
       if (q.kunden) S.kunden = q.kunden;
       if (q.vertrieb && q.vertrieb.length) { S.einst ||= d.einstellungen; S.einst.vertrieb = q.vertrieb; S.einst.vertriebQuelle = "applus"; }
+      this.benutzerZeilen = q.benutzer || null; this.rechteZeilen = q.rechte || null;
       const ex = q.artikel ? null : this._artikelAusExcel();
       this.artikelSetzen(q.artikel || ex || d.artikel || [], q.artikel ? "applus" : ex && ex.length ? "excel" : "beispiel");
       if (q.artikel) try { this.stammAnwenden(); } catch (e) { console.warn("[Konfigurator] Stammabgleich mit ARTIKEL übersprungen:", e); }
@@ -5090,7 +5102,7 @@
       const out = {}, cfg = K.cfg || {}, qs = this.abfragen(); this.ladefehler = []; this.applusQuellen = 0; this.abfrageStatus = {};
       if (!cfg.loadQuery) return out;
       const blaetter = {};
-      await Promise.all(["katalog", "produkte", "merkmale", "codes", "regeln", "stueckliste", "kunden", "artikel", "vertrieb"].map(async typ => {
+      await Promise.all(["katalog", "produkte", "merkmale", "codes", "regeln", "stueckliste", "kunden", "artikel", "vertrieb", "benutzer", "rechte"].map(async typ => {
         if (!qs[typ]) return;
         try {
           const rows = await cfg.loadQuery(qs[typ], typ);
@@ -5100,9 +5112,10 @@
           if (typ === "kunden") { out.kunden = rows.map(kundeAusZeile).filter(k => k.firma); return; }
           if (typ === "vertrieb") { out.vertrieb = rows.map(vertriebAusZeile).filter(v => v.name); return; }
           if (typ === "artikel") { out.artikel = rows; return; }
+          if (typ === "benutzer" || typ === "rechte") { out[typ] = rows; return; }
           const kopf = [...new Set(rows.flatMap(r => Object.keys(r)))];
           blaetter[typ] = [kopf, ...rows.map(r => kopf.map(h => r[h] ?? ""))];
-        } catch (e) { console.warn("[Konfigurator] Abfrage fehlgeschlagen:", qs[typ], e); this.ladefehler.push(qs[typ] + ": " + (e.message || e)); this.abfrageStatus[typ] = { name: qs[typ], fehler: e.message || String(e) }; }
+        } catch (e) { console.warn("[Konfigurator] Abfrage fehlgeschlagen:", qs[typ], e); if (!this._standardAbfrage(typ, qs[typ])) this.ladefehler.push(qs[typ] + ": " + (e.message || e)); this.abfrageStatus[typ] = { name: qs[typ], fehler: e.message || String(e) }; }
       }));
       if (Object.keys(blaetter).length && K.X) {
         const zuo = K.X.zuordnungVorschlagen(blaetter, (this.S.einst || {}).importZuordnung);
@@ -5911,7 +5924,7 @@
      Übersicht
      ===================================================================== */
   K.route("start", () => {
-    const A = S().angebote, offen = A.filter(a => a.status === "entwurf" || a.status === "versendet");
+    const A = K.angeboteSichtbar(), offen = A.filter(a => a.status === "entwurf" || a.status === "versendet");
     const sum = a => E.summen(a, S().einst.mwst).netto;
     const woche = A.reduce((n, a) => n + K.aufrufe(a).filter(e => Date.now() - e.ts < 7 * 864e5).length, 0);
     const entsch = A.filter(a => a.status === "angenommen" || a.status === "abgelehnt");
@@ -5996,7 +6009,7 @@
       </div></article>`;
   }
   function baum(mo, gid, tiefe) {
-    const zahl = id => mo.produkte.filter(p => p.aktiv !== false && nachfahren(mo, id).includes(p.gruppe)).length;
+    const zahl = id => mo.produkte.filter(p => p.aktiv !== false && K.produktSichtbar(mo, p) && nachfahren(mo, id).includes(p.gruppe)).length;
     return kinder(mo, gid).filter(g => zahl(g.id) > 0).map(g => {
       const hatKinder = kinder(mo, g.id).some(k => zahl(k.id) > 0), offen = K.kat.offen[g.id] ?? true, aktiv = K.kat.gruppe === g.id;
       const anzahl = zahl(g.id);
@@ -6010,7 +6023,7 @@
     const mo = K.kat.entwurf ? S().entwurf : live(); if (!mo) return keinModell();
     const k = K.kat, q = k.suche.toLowerCase(), fav = S().prefs.favoriten || [];
     const imBaum = k.gruppe === "fav" ? null : k.gruppe ? nachfahren(mo, k.gruppe) : null;
-    let prods = mo.produkte.filter(p => p.aktiv !== false)
+    let prods = mo.produkte.filter(p => p.aktiv !== false && K.produktSichtbar(mo, p))
       .filter(p => k.gruppe === "fav" ? fav.includes(p.id) : !imBaum || imBaum.includes(p.gruppe))
       .filter(p => !q || (p.name + " " + p.beschreibung + " " + (p.artnr || "") + " " + (p.code || "")).toLowerCase().includes(q));
     // Katalogfilter aus Merkmalen mit "katalogfilter" (z. B. Anzahl Achsen)
@@ -6028,7 +6041,7 @@
     <div class="katalog">
       <nav class="baum panel" aria-label="Produktgruppen">
         <input type="search" id="kat-suche" data-in="katSuche" placeholder="Suche im Katalog" value="${esc(k.suche)}">
-        <ul><li><div class="baum-zeile${!k.gruppe ? " aktiv" : ""}" style="--tiefe:0"><span class="baum-auf"></span><button type="button" class="baum-name" data-act="katGruppe" data-g="">Gesamter Katalog<span class="gedimmt klein">${mo.produkte.filter(p => p.aktiv !== false).length}</span></button></div>
+        <ul><li><div class="baum-zeile${!k.gruppe ? " aktiv" : ""}" style="--tiefe:0"><span class="baum-auf"></span><button type="button" class="baum-name" data-act="katGruppe" data-g="">Gesamter Katalog<span class="gedimmt klein">${mo.produkte.filter(p => p.aktiv !== false && K.produktSichtbar(mo, p)).length}</span></button></div>
           <ul>${baum(mo, "", 1)}</ul></li>
           <li><div class="baum-zeile${k.gruppe === "fav" ? " aktiv" : ""}" style="--tiefe:0"><span class="baum-auf"></span><button type="button" class="baum-name" data-act="katGruppe" data-g="fav">★ Favoriten<span class="gedimmt klein">${fav.length}</span></button></div></li></ul>
       </nav>
@@ -6086,6 +6099,7 @@
   };
   K.konfigOeffnen = (pid, sel, ziel, entwurf) => {
     const mo = entwurf ? S().entwurf : live(), p = E.produkt(mo, pid); if (!p) { K.toast("Dieses Fahrzeug gibt es im Modell nicht mehr."); return; }
+    if (!entwurf && !K.produktSichtbar(mo, p)) { K.toast("Dieses Fahrzeug ist für Sie nicht freigegeben."); return; }
     const s = K.clone(sel || {}); const notes = E.bereinige(mo, p, s);
     Object.assign(K.konf, { produkt: pid, sel: s, notes, ziel, tab: "Grundmaschine", entwurf: !!entwurf });
     K.gehe("konfig");
@@ -6196,7 +6210,7 @@
             <span class="row">${foto ? `<button class="btn klein" type="button" data-act="konfAnsicht">${k.zeige3d ? "Foto" : "3D-Ansicht"}</button>` : ""}<span class="nur3d row"><button class="btn klein" type="button" data-act="export3d" data-f="png">Bild speichern</button><button class="btn klein" type="button" data-act="export3d" data-f="glb">3D-Szene exportieren</button></span></span></div></div>
         <details class="panel regeln"><summary>Aktive Regeln (${regeln.length})</summary>
           <ul class="regelliste">${regeln.map(r => `<li><span class="mono">${r.id}</span><span>${esc(r.hinweis || E.satz(mo, r))}</span></li>`).join("") || "<li><span></span><span>Keine Einschränkungen aktiv.</span></li>"}</ul></details>
-        <div class="row"><button class="btn klein" type="button" data-act="konfReset">Auswahl zurücksetzen</button><select id="konf-produkt" data-act="konfProdukt" aria-label="Grundfahrzeug wechseln">${mo.produkte.filter(x => x.aktiv !== false).map(x => `<option value="${x.id}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div>
+        <div class="row"><button class="btn klein" type="button" data-act="konfReset">Auswahl zurücksetzen</button><select id="konf-produkt" data-act="konfProdukt" aria-label="Grundfahrzeug wechseln">${mo.produkte.filter(x => x.aktiv !== false && K.produktSichtbar(mo, x)).map(x => `<option value="${x.id}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div>
       </aside></div>`;
   });
   K.act.konfTab = el => { K.konf.tab = el.dataset.t; K.render(); };
@@ -6243,7 +6257,7 @@
       else a.positionen.push(neu);
       K.Store.angebotSpeichern(a); const nr = a.nr; k.ziel = null; K.toast("Position übernommen"); K.gehe("angebot-" + nr); return;
     }
-    const offen = S().angebote.filter(a => a.status === "entwurf").sort((x, y) => y.erstellt - x.erstellt);
+    const offen = K.angeboteSichtbar().filter(a => a.status === "entwurf").sort((x, y) => y.erstellt - x.erstellt);
     K.sheet(`<h3>In Angebot übernehmen</h3>
       <div class="feld"><label for="ua-kunde">Neues Angebot für</label><select id="ua-kunde">${kundenOptionen()}</select></div>
       <div class="row"><button class="btn primary" type="button" data-act="uebernehmenNeu">Neues Angebot anlegen</button></div>
@@ -6264,7 +6278,7 @@
     const nr = num.nr; if (num.quelle === "ersatz") K.toast("APplus hat keine Nummer geliefert, vorläufige Nummer " + nr + " vergeben.");
     const ich = K.Store.meinVertrieb || e.vertrieb[0]?.id;
     const a = { nr, kundeId: kid, kunde: k ? { firma: k.firma, person: k.person, strasse: k.strasse, ort: k.ort, mail: k.mail } : { firma: "", person: "", strasse: "", ort: "" },
-      bearbeiter: ich, erstellt: Date.now(), gueltig: Date.now() + e.gueltigTage * 864e5, status: "entwurf", positionen: [], rabatt: 0,
+      bearbeiter: ich, erstelltVon: K.Rechte?.benutzer?.login || K.Rechte?.benutzer?.personal || "", erstellt: Date.now(), gueltig: Date.now() + e.gueltigTage * 864e5, status: "entwurf", positionen: [], rabatt: 0,
       texte: { einleitung: e.vorlage.einleitung, lieferung: e.vorlage.lieferung, zahlung: e.vorlage.zahlung, gewaehrleistung: e.vorlage.gewaehrleistung, schluss: e.vorlage.schluss },
       token: null, freigegeben: false, events: [], nrQuelle: num.quelle, kundeNr: k?.nr || "" };
     { const b = (e.vertrieb || []).find(v => v.id === ich); if (b) a.bearbeiterInfo = { name: b.name, tel: b.tel, mail: b.mail, nr: b.nr || "" }; }
@@ -6281,13 +6295,13 @@
   K.ang = { status: "alle", suche: "" };
   K.route("angebote", () => {
     const f = K.ang, q = f.suche.toLowerCase();
-    const liste = [...S().angebote].sort((a, b) => b.erstellt - a.erstellt)
+    const liste = [...K.angeboteSichtbar()].sort((a, b) => b.erstellt - a.erstellt)
       .filter(a => f.status === "alle" || (f.status === "heiss" ? K.heiss(a) : a.status === f.status))
       .filter(a => !q || (a.nr + " " + a.kunde.firma + " " + a.positionen.map(p => p.produktName || p.text).join(" ")).toLowerCase().includes(q));
-    const zahl = s => S().angebote.filter(a => s === "heiss" ? K.heiss(a) : a.status === s).length;
+    const zahl = s => K.angeboteSichtbar().filter(a => s === "heiss" ? K.heiss(a) : a.status === s).length;
     return kopf("Vertrieb", "Angebote", "", `<button class="btn primary" type="button" data-act="angebotNeu">Neues Angebot</button>`) + `
       <div class="filterleiste"><div class="segment" role="group" aria-label="Status">
-        ${[["alle", "Alle", S().angebote.length], ["heiss", "Heiß", zahl("heiss")], ...Object.entries(STATUS).map(([k, v]) => [k, v, zahl(k)])].map(([id, n, c]) => `<button type="button" data-act="angStatus" data-s="${id}" aria-pressed="${f.status === id}">${n} <span class="zaehler">${c}</span></button>`).join("")}
+        ${[["alle", "Alle", K.angeboteSichtbar().length], ["heiss", "Heiß", zahl("heiss")], ...Object.entries(STATUS).map(([k, v]) => [k, v, zahl(k)])].map(([id, n, c]) => `<button type="button" data-act="angStatus" data-s="${id}" aria-pressed="${f.status === id}">${n} <span class="zaehler">${c}</span></button>`).join("")}
       </div><input type="search" id="ang-suche" data-in="angSuche" placeholder="Nummer, Kunde oder Fahrzeug" value="${esc(f.suche)}"></div>
       ${angebotsTabelle(liste)}`;
   });
@@ -6434,7 +6448,7 @@
     return kopf("Vertrieb", "Kunden", "", `<a class="btn primary" href="#kunde-neu">Neuer Kunde</a>`) + `
       <div class="filterleiste"><input type="search" id="kd-suche" data-in="kdSuche" placeholder="Firma, Ort, Ansprechpartner oder Kundennummer" value="${esc(K.kd.suche)}"></div>
       ${liste.length ? `<div class="tabwrap"><table class="klickbar"><thead><tr><th>Nr.</th><th>Firma</th><th>Ansprechpartner</th><th>Ort</th><th class="r">Angebote</th><th class="r">Volumen netto</th></tr></thead><tbody>
-      ${liste.map(k => { const as = S().angebote.filter(a => a.kundeId === k.id); return `<tr data-act="oeffne" data-ziel="kunde-${k.id}" tabindex="0"><td class="mono">${esc(k.nr)}</td><td><b>${esc(k.firma)}</b></td><td>${esc(k.person)}</td><td class="gedimmt">${esc(k.ort)}</td><td class="r num">${as.length}</td><td class="r num">${K.eur(as.reduce((n, a) => n + E.summen(a, S().einst.mwst).netto, 0))}</td></tr>`; }).join("")}
+      ${liste.map(k => { const as = K.angeboteSichtbar().filter(a => a.kundeId === k.id); return `<tr data-act="oeffne" data-ziel="kunde-${k.id}" tabindex="0"><td class="mono">${esc(k.nr)}</td><td><b>${esc(k.firma)}</b></td><td>${esc(k.person)}</td><td class="gedimmt">${esc(k.ort)}</td><td class="r num">${as.length}</td><td class="r num">${K.eur(as.reduce((n, a) => n + E.summen(a, S().einst.mwst).netto, 0))}</td></tr>`; }).join("")}
       </tbody></table></div>` : `<div class="leer">Keine Kunden gefunden.</div>`}`;
   });
   K.inp.kdSuche = el => { K.kd.suche = el.value; K.render(); };
@@ -6443,7 +6457,7 @@
     const neu = id === "neu";
     let k = neu ? (K.kdEntwurf ||= { id: K.id("k"), nr: String(10000 + Math.floor(Math.random() * 9000)), firma: "", person: "", strasse: "", ort: "", land: "DE", mail: "", tel: "", notiz: "" }) : S().kunden.find(x => x.id === id);
     if (!k) return `<div class="leer">Kunde nicht gefunden.</div>`;
-    const as = S().angebote.filter(a => a.kundeId === k.id).sort((a, b) => b.erstellt - a.erstellt);
+    const as = K.angeboteSichtbar().filter(a => a.kundeId === k.id).sort((a, b) => b.erstellt - a.erstellt);
     const f = (key, l, typ = "text", breit) => `<div class="feld${breit ? " breit" : ""}"><label for="kd-${key}">${l}</label><input id="kd-${key}" type="${typ}" data-in="kdFeld" data-k="${key}" data-id="${neu ? "neu" : k.id}" value="${esc(k[key])}" ${K.Store.schreiben ? "" : "disabled"}></div>`;
     return kopf("Kunde", neu ? "Neuer Kunde" : esc(k.firma), "", neu ? `<button class="btn primary" type="button" data-act="kdAnlegen">Kunde anlegen</button>` : `<button class="btn" type="button" data-act="kdAngebot" data-id="${k.id}">Neues Angebot</button><button class="btn gefahr-text" type="button" data-act="kdLoeschen" data-id="${k.id}">Löschen</button>`) + `
       <section class="panel"><div class="formgitter">${f("firma", "Firma", "text", true)}${f("nr", "Kundennummer")}${f("person", "Ansprechpartner")}${f("strasse", "Straße")}${f("ort", "PLZ und Ort")}${f("mail", "E-Mail", "email")}${f("tel", "Telefon", "tel")}
@@ -7426,7 +7440,7 @@
         <p class="klein gedimmt">Für den Betrieb in APplus wird die Datenschicht (store.js) gegen Ihre Queries und Tabellen getauscht. Die Struktur steht in daten/demo.json.</p></section>`;
   });
   /* Angebotsnummern: eigener Nummernkreis oder aus APplus */
-  const ABFRAGEN = [["artikel", "Artikelstamm (Codes)", "ARTIKEL, NAME; optional NETTO bzw. VKPREIS, HERSTELLKOSTEN, ME"], ["kunden", "Kunden", "KUNDENNR, FIRMA, STRASSE, PLZ, ORT …"], ["vertrieb", "Vertrieb (Bearbeiter)", "PERSONAL, NAME, TELEFON, EMAIL"]];
+  const ABFRAGEN = [["benutzer", "Angemeldeter Benutzer", "eine Zeile: BENUTZER, PERSONAL, NAME, EMAIL (Vorgabe apx_Benutzer)"], ["rechte", "Rechte", "BENUTZER, ROLLE, FAMILIE, FAHRZEUG (Vorgabe apx_Rechte)"], ["artikel", "Artikelstamm (Codes)", "ARTIKEL, NAME; optional NETTO bzw. VKPREIS, HERSTELLKOSTEN, ME"], ["kunden", "Kunden", "KUNDENNR, FIRMA, STRASSE, PLZ, ORT …"], ["vertrieb", "Vertrieb (Bearbeiter)", "PERSONAL, NAME, TELEFON, EMAIL"]];
   function abfragenPanel(e) {
     const qs = K.Store.abfragen(), st = K.Store.abfrageStatus || {}, cfg = (K.cfg && K.cfg.queries) || {};
     return `<section class="panel"><h3>APplus-Abfragen</h3><p class="klein gedimmt">Name der Abfrage, die dem Dashboard zugeordnet ist (wie in APplus angelegt). Der Eintrag hier gilt für diesen Browser und hat Vorrang vor <code>KONF_CONFIG</code>.</p>
@@ -10834,19 +10848,158 @@
 
 </script>
 <script>
+/* =====================================================================
+   Rechte: angemeldeten APplus-Benutzer erkennen, Rolle und sichtbare
+   Familien/Fahrzeuge aus einer APplus-Abfrage, Ansicht Studio › Rechte.
+
+   Abfrage „benutzer“ (Vorgabe apx_Benutzer): genau eine Zeile zum angemeldeten
+     Benutzer, Spalten BENUTZER/LOGIN, PERSONAL, NAME (oder VORNAME+NACHNAME), EMAIL.
+   Abfrage „rechte“ (Vorgabe apx_Rechte): je Zuordnung eine Zeile,
+     BENUTZER (Login oder Personalnummer), ROLLE, FAMILIE, FAHRZEUG.
+     ROLLE: Administrator | Produktmanagement | Vertriebsleitung | Vertrieb
+     FAMILIE: Name oder Kennung einer Familie aus „Katalog aufbauen“ (mit Unterfamilien), * = alle
+     FAHRZEUG: Artikelnummer eines einzelnen Fahrzeugs
+   Ohne geladene Rechte-Abfrage gilt alles wie bisher (keine Einschränkung).
+
+   Hinweis: Die Prüfung läuft im Browser. Sie steuert, was angezeigt wird,
+   ersetzt aber keine Berechtigung in APplus selbst.
+   ===================================================================== */
+(function () {
+  const K = window.KONF, E = K.E, esc = K.esc, S = () => K.Store.S;
+  const ROLLEN = {
+    admin: { name: "Administrator", stufe: 4, studio: true, einstellungen: true, rechte: true, alleFahrzeuge: true, alleAngebote: true },
+    produkt: { name: "Produktmanagement", stufe: 3, studio: true, einstellungen: false, rechte: false, alleFahrzeuge: true, alleAngebote: false },
+    leitung: { name: "Vertriebsleitung", stufe: 2, studio: false, einstellungen: false, rechte: false, alleFahrzeuge: true, alleAngebote: true },
+    vertrieb: { name: "Vertrieb", stufe: 1, studio: false, einstellungen: false, rechte: false, alleFahrzeuge: false, alleAngebote: false },
+    keine: { name: "kein Zugriff", stufe: 0, studio: false, einstellungen: false, rechte: false, alleFahrzeuge: false, alleAngebote: false }
+  };
+  const rolleAus = t => { const x = String(t || "").toLowerCase().replace(/[^a-zäöü]/g, ""); if (!x) return null;
+    if (/^(admin|administrator|adm)/.test(x)) return "admin"; if (/^(produkt|pm|produktmanagement|produktmanager)/.test(x)) return "produkt";
+    if (/(leitung|leiter|vl|vertriebsleitung)/.test(x)) return "leitung"; if (/^(vertrieb|vt|verkauf|au(ss|ß)endienst|innendienst)/.test(x)) return "vertrieb"; return null; };
+  const norm = s => String(s ?? "").trim().toLowerCase();
+  const spalten = z => { const n = {}; for (const [k, v] of Object.entries(z || {})) n[String(k).toLowerCase().replace(/[^a-z0-9]/g, "")] = v; const f = (...ks) => { for (const k of ks) if (n[k] != null && String(n[k]).trim() !== "") return String(n[k]).trim(); return ""; }; return f; };
+
+  const R = K.Rechte = { aktiv: false, benutzer: null, rolle: "admin", familien: null, fahrzeuge: null, zeilen: [], meldung: "", simuliert: null };
+  /** Rechte aus den Abfragen bestimmen. Ohne Rechte-Abfrage: keine Einschränkung. */
+  R.bestimmen = () => {
+    const bz = K.Store.benutzerZeilen, rz = K.Store.rechteZeilen;
+    R.zeilen = (rz || []).map(z => { const f = spalten(z); return { benutzer: f("benutzer", "login", "username", "user", "personal", "personalnr"), rolle: rolleAus(f("rolle", "role", "gruppe")), familie: f("familie", "produktfamilie", "produktgruppe", "katalog"), fahrzeug: f("fahrzeug", "artikel", "produkt") }; }).filter(z => z.benutzer);
+    if (bz && bz.length) { const f = spalten(bz[0]); R.benutzer = { login: f("benutzer", "login", "username", "user", "anmeldename"), personal: f("personal", "personalnr", "mitarbeiter", "kuerzel"), name: f("name") || [f("vorname"), f("nachname")].filter(Boolean).join(" "), mail: f("email", "mail"), mehrdeutig: bz.length > 1 }; }
+    else R.benutzer = null;
+    R.aktiv = !!rz;
+    if (R.simuliert) { const s0 = R.simuliert; R.simuliert = null; R.bestimmen(); R.echteRolle = R.rolle; R.simuliert = s0; } else R.echteRolle = null;
+    const wer = R.simuliert || R.benutzer;
+    if (!R.aktiv) { Object.assign(R, { rolle: "admin", familien: null, fahrzeuge: null, meldung: "" }); return R; }
+    if (!wer) { Object.assign(R, { rolle: "keine", familien: new Set(), fahrzeuge: new Set(), meldung: bz ? "Die Benutzer-Abfrage hat keine Zeile geliefert." : "Der angemeldete Benutzer wird nicht erkannt: Die Benutzer-Abfrage fehlt oder ist nicht geladen." }); return R; }
+    const ids = [wer.login, wer.personal, wer.mail].map(norm).filter(Boolean);
+    const meine = R.zeilen.filter(z => ids.includes(norm(z.benutzer)));
+    if (!meine.length) { Object.assign(R, { rolle: "keine", familien: new Set(), fahrzeuge: new Set(), meldung: `Für ${wer.name || wer.login || wer.personal} ist in der Rechte-Abfrage nichts hinterlegt.` }); return R; }
+    const rolle = meine.map(z => z.rolle || "vertrieb").sort((a, b) => ROLLEN[b].stufe - ROLLEN[a].stufe)[0];
+    const fam = new Set(), fz = new Set(); let alle = false;
+    for (const z of meine) { if (z.familie === "*" || norm(z.familie) === "alle") alle = true; else if (z.familie) fam.add(norm(z.familie)); if (z.fahrzeug) fz.add(norm(z.fahrzeug)); }
+    Object.assign(R, { rolle, familien: alle || ROLLEN[rolle].alleFahrzeuge ? null : fam, fahrzeuge: alle || ROLLEN[rolle].alleFahrzeuge ? null : fz, meldung: "", meineZeilen: meine });
+    return R;
+  };
+  R.darf = recht => !!(ROLLEN[R.rolle] || ROLLEN.keine)[recht];
+  R.rollenName = r => (ROLLEN[r || R.rolle] || ROLLEN.keine).name;
+  /** Darf der Benutzer dieses Fahrzeug sehen? Familien zählen mit allen Unterfamilien. */
+  R.siehtProdukt = (mo, p) => {
+    if (!R.familien && !R.fahrzeuge) return true; if (!p) return false;
+    if (p.code && R.fahrzeuge.has(norm(p.code))) return true; if (R.fahrzeuge.has(norm(p.id))) return true;
+    return E.gruppenPfad(mo, p.gruppe).some(g => R.familien.has(norm(g.name)) || R.familien.has(norm(g.id)));
+  };
+  /** Eigener Vertriebseintrag (für Bearbeiter und „eigene Angebote“) */
+  R.meinVertrieb = () => {
+    const wer = R.simuliert || R.benutzer, v = S().einst?.vertrieb || []; if (!wer) return null;
+    const ids = [wer.personal, wer.login, wer.mail, wer.name].map(norm).filter(Boolean);
+    return v.find(x => [x.nr, x.id, x.mail, x.name, x.id?.replace(/^p/, "")].map(norm).some(y => y && ids.includes(y))) || null;
+  };
+  R.istMeinAngebot = a => {
+    const wer = R.simuliert || R.benutzer; if (!wer) return false; const mv = R.meinVertrieb();
+    if (mv && a.bearbeiter === mv.id) return true;
+    const ids = [wer.personal, wer.login, wer.mail].map(norm).filter(Boolean), b = a.bearbeiterInfo || {};
+    return [a.erstelltVon, b.nr, b.mail].map(norm).some(y => y && ids.includes(y));
+  };
+  K.angeboteSichtbar = () => R.darf("alleAngebote") || !R.aktiv ? S().angebote : S().angebote.filter(R.istMeinAngebot);
+  K.produktSichtbar = (mo, p) => !R.aktiv || R.siehtProdukt(mo, p);
+
+  /* ---------- Zugriff je Seite ---------- */
+  const STUDIO = /^studio-/, NUR_ADMIN = new Set(["studio-einstellungen", "studio-rechte"]);
+  R.seiteErlaubt = route => {
+    if (!R.aktiv || /^raum-/.test(route)) return true;
+    if (route === "studio-rechte" && R.simuliert && R.echteRolle === "admin") return true;
+    if (R.rolle === "keine") return false;
+    if (route === "studio-rechte" && R.simuliert && R.echteRolle === "admin") return true;
+    if (NUR_ADMIN.has(route)) return R.darf("einstellungen");
+    if (STUDIO.test(route)) return R.darf("studio");
+    if (/^angebot-/.test(route) && !R.darf("alleAngebote")) { const a = S().angebote.find(x => "angebot-" + x.nr === route); return !a || R.istMeinAngebot(a); }
+    return true;
+  };
+  const keinZugriff = route => `<div class="leer recht-sperre"><h2>${R.rolle === "keine" ? "Kein Zugriff" : "Diese Seite ist für Ihre Rolle nicht freigegeben"}</h2>
+    <p>${esc(R.meldung || `Angemeldet als ${R.benutzer?.name || R.benutzer?.login || "?"} (${R.rollenName()}).`)}</p><p class="klein gedimmt">Rechte werden in APplus über die Abfrage <code>${esc(K.Store.abfragen().rechte || "apx_Rechte")}</code> vergeben. Bitte an einen Administrator wenden.</p>
+    ${R.rolle !== "keine" ? `<p><button class="btn" type="button" data-act="oeffne" data-ziel="katalog">Zum Katalog</button></p>` : ""}</div>`;
+  R.sperre = keinZugriff;
+  // Während der Vorschau oben eine Leiste mit „Vorschau beenden“
+  const altRender = K.render;
+  K.render = () => { altRender(); const v = K.el("konf-view"); if (v && R.simuliert && !v.querySelector(".recht-vorschau")) v.insertAdjacentHTML("afterbegin", `<div class="hinweis warn recht-vorschau"><b>Vorschau als ${esc(R.simuliert.login)}</b> (${esc(R.rollenName())}). So sieht dieser Benutzer die App. <button class="btn klein" type="button" data-act="rechtSimEnde">Vorschau beenden</button></div>`); };
+  K.act.rechtSimEnde = () => { R.simuliert = null; R.bestimmen(); K.navBauen && K.navBauen(); K.gehe("studio-rechte"); };
+
+  /* ---------- Studio › Rechte ---------- */
+  K.route("studio-rechte", () => {
+    const St = K.studio, bz = K.Store.benutzerZeilen, wer = R.benutzer, qs = K.Store.abfragen(), st = K.Store.abfrageStatus || {};
+    const zeile = (t, w) => `<tr><th>${t}</th><td>${w}</td></tr>`;
+    const famName = n => { const g = (S().live || S().entwurf)?.gruppen.find(x => norm(x.name) === n || norm(x.id) === n); return g ? esc(g.name) : `<span class="warntext" title="Keine Familie mit diesem Namen">${esc(n)}</span>`; };
+    const nutzer = [...new Set(R.zeilen.map(z => z.benutzer))];
+    return St.kopf("Rechte", "Wer was sieht, kommt aus APplus: eine Abfrage erkennt den angemeldeten Benutzer, eine zweite ordnet Rollen und Familien zu. Ohne Rechte-Abfrage gibt es keine Einschränkung.") + `
+      <div class="recht-raster">
+      <section class="panel"><h3>Angemeldet</h3><table class="kompakt recht-info"><tbody>
+        ${zeile("Benutzer", wer ? `<b>${esc(wer.name || "–")}</b> · ${esc(wer.login || "–")}${wer.personal ? ` · Pers.-Nr. ${esc(wer.personal)}` : ""}${wer.mehrdeutig ? ` <span class="warntext">Abfrage liefert ${bz.length} Zeilen, verwendet wird die erste</span>` : ""}` : `<span class="warntext">nicht erkannt</span> (${esc(st.benutzer?.fehler || (qs.benutzer ? "Abfrage " + qs.benutzer + " nicht geladen" : "keine Abfrage"))})`)}
+        ${zeile("Rechte-Abfrage", R.aktiv ? `<code>${esc(qs.rechte)}</code> · ${R.zeilen.length} Zuordnungen` : `<span class="gedimmt">nicht geladen${st.rechte?.fehler ? ": " + esc(st.rechte.fehler) : ""}, daher keine Einschränkung</span>`)}
+        ${zeile("Rolle", `<b>${esc(R.rollenName())}</b>${R.simuliert ? ` <span class="chip">Vorschau als ${esc(R.simuliert.login)}</span>` : ""}`)}
+        ${zeile("Sieht", R.familien || R.fahrzeuge ? [...[...(R.familien || [])].map(famName), ...[...(R.fahrzeuge || [])].map(x => `<code>${esc(x)}</code>`)].join(", ") || "keine Fahrzeuge" : "alle Fahrzeuge")}
+        ${zeile("Angebote", R.darf("alleAngebote") || !R.aktiv ? "alle" : "nur eigene" + (R.meinVertrieb() ? ` (als ${esc(R.meinVertrieb().name)})` : ` <span class="warntext">kein passender Eintrag im Vertrieb gefunden</span>`))}
+        ${R.meldung ? zeile("Hinweis", `<span class="warntext">${esc(R.meldung)}</span>`) : ""}
+      </tbody></table>
+      ${nutzer.length ? `<div class="feld" style="margin-top:12px"><label for="recht-sim">Ansicht testen als</label><select id="recht-sim" data-act="rechtSim"><option value="">– ich selbst –</option>${nutzer.map(n => `<option ${R.simuliert?.login === n ? "selected" : ""}>${esc(n)}</option>`).join("")}</select><span class="klein gedimmt">Zeigt die App so, wie dieser Benutzer sie sieht, bis zum Neuladen.</span></div>` : ""}</section>
+      <section class="panel"><h3>Rollen</h3><div class="tabwrap ohne-rand"><table class="kompakt"><thead><tr><th>Rolle</th><th>Studio</th><th>Fahrzeuge</th><th>Angebote</th><th>Einstellungen</th></tr></thead><tbody>
+        ${["admin", "produkt", "leitung", "vertrieb"].map(k => { const r = ROLLEN[k]; return `<tr><td><b>${r.name}</b></td><td>${r.studio ? "ja" : "–"}</td><td>${r.alleFahrzeuge ? "alle" : "zugeordnete"}</td><td>${r.alleAngebote ? "alle" : "eigene"}</td><td>${r.einstellungen ? "ja" : "–"}</td></tr>`; }).join("")}</tbody></table></div>
+        <p class="klein gedimmt">Hat ein Benutzer mehrere Zeilen, gilt die höchste Rolle; Familien und Fahrzeuge werden zusammengezählt. Familien gelten mit allen Unterfamilien.</p></section>
+      </div>
+      <section class="panel"><h3>Zuordnungen aus APplus</h3>${R.zeilen.length ? `<div class="tabwrap"><table class="kompakt"><thead><tr><th>Benutzer</th><th>Rolle</th><th>Familie</th><th>Fahrzeug</th></tr></thead><tbody>
+        ${R.zeilen.map(z => `<tr><td class="mono">${esc(z.benutzer)}</td><td>${z.rolle ? esc(R.rollenName(z.rolle)) : `<span class="warntext">unbekannt, gilt als Vertrieb</span>`}</td><td>${z.familie ? (z.familie === "*" ? "alle" : famName(norm(z.familie))) : ""}</td><td class="mono">${esc(z.fahrzeug)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="gedimmt">Keine Zuordnungen geladen.</p>`}</section>
+      <section class="panel"><h3>Einrichtung in APplus</h3>
+        <p class="klein">1. Abfrage <code>apx_Benutzer</code>: liefert <b>genau eine Zeile</b> zum angemeldeten Benutzer. Wie APplus den angemeldeten Benutzer in eine Abfrage gibt (Platzhalter oder Funktion), weiß Ihre APplus-Betreuung. Beispiel mit Platzhalter:</p>
+        <pre class="code">SELECT BENUTZER, PERSONAL, NAME, EMAIL
+FROM   PERSONAL            -- bzw. Ihre Benutzer-/Personaltabelle
+WHERE  BENUTZER = &lt;angemeldeter Benutzer&gt;</pre>
+        <p class="klein">2. Abfrage <code>apx_Rechte</code>: eine Zeile je Zuordnung. Pflege z. B. in einer kleinen Tabelle oder über vorhandene Rollen/Gruppen:</p>
+        <pre class="code">SELECT BENUTZER, ROLLE, FAMILIE, FAHRZEUG FROM KONF_RECHTE
+-- BENUTZER  Login oder Personalnummer
+-- ROLLE     Administrator | Produktmanagement | Vertriebsleitung | Vertrieb
+-- FAMILIE   Name der Familie aus „Katalog aufbauen“, * = alle
+-- FAHRZEUG  Artikelnummer (optional, einzelnes Fahrzeug)</pre>
+        <p class="klein">3. Beide Abfragen dem Dashboard zuordnen. Heißen sie anders, unter Einstellungen › APplus-Abfragen eintragen.</p>
+        <p class="hinweis klein">Die Prüfung läuft im Browser und steuert die Anzeige. Wer technisch versiert ist, kann sie umgehen. Echte Sperren gehören zusätzlich in die APplus-Abfragen selbst (z. B. Angebote nur des angemeldeten Benutzers ausliefern).</p></section>`;
+  });
+  K.act.rechtSim = el => { const n = el.value; R.simuliert = n ? { login: n, personal: n, name: n } : null; R.bestimmen(); K.navBauen && K.navBauen(); K.render(); K.toast(n ? `Vorschau als ${n}: ${R.rollenName()}` : "Eigene Ansicht"); };
+})();
+
+</script>
+<script>
 /* Start der Anwendung: Navigation, Datenschicht, erstes Zeichnen */
 (function () {
   const K = window.KONF, S = () => K.Store.S;
 
   const NAV = [
     ["Vertrieb", [["start", "Übersicht", "M3 12h7V3H3zm11 9h7v-9h-7zM3 21h7v-6H3zm11-12h7V3h-7z"], ["katalog", "Katalog", "M4 6h16M4 12h16M4 18h10"], ["konfig", "Konfigurator", "M12 3v4m0 10v4M3 12h4m10 0h4M6 6l2.5 2.5m7 7L18 18M6 18l2.5-2.5m7-7L18 6"], ["angebote", "Angebote", "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5"], ["kunden", "Kunden", "M16 19v-1a4 4 0 0 0-8 0v1M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM20 19v-1a3 3 0 0 0-2-2.8M4 19v-1a3 3 0 0 1 2-2.8"]]],
-    ["Studio", [["studio-katalog", "Katalog aufbauen", "M3 5h7v6H3zM14 5h7v6h-7zM3 15h7v4H3zM14 15h7v4h-7z"], ["studio-regeln", "Regeln", "M5 5h6v6H5zM13 13h6v6h-6zM11 8h4a2 2 0 0 1 2 2v3"], ["studio-import", "Excel-Import", "M4 4h16v16H4zM4 9h16M9 4v16M12 13l2 3m0-3-2 3"], ["studio-test", "Modelltest", "M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"], ["studio-freigabe", "Freigabe", "M5 12l4 4L19 6"], ["studio-applus", "Nach APplus", "M4 12h12M12 6l6 6-6 6M20 4v16"], ["studio-vorlagen", "Angebotsdesigner", "M5 3h14v18H5zM9 7h6M9 11h6M9 15h3"], ["studio-einstellungen", "Einstellungen", "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"], ["studio-protokoll", "Protokoll", "M12 8v4l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"]]],
+    ["Studio", [["studio-katalog", "Katalog aufbauen", "M3 5h7v6H3zM14 5h7v6h-7zM3 15h7v4H3zM14 15h7v4h-7z"], ["studio-regeln", "Regeln", "M5 5h6v6H5zM13 13h6v6h-6zM11 8h4a2 2 0 0 1 2 2v3"], ["studio-import", "Excel-Import", "M4 4h16v16H4zM4 9h16M9 4v16M12 13l2 3m0-3-2 3"], ["studio-test", "Modelltest", "M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"], ["studio-freigabe", "Freigabe", "M5 12l4 4L19 6"], ["studio-applus", "Nach APplus", "M4 12h12M12 6l6 6-6 6M20 4v16"], ["studio-vorlagen", "Angebotsdesigner", "M5 3h14v18H5zM9 7h6M9 11h6M9 15h3"], ["studio-rechte", "Rechte", "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4"], ["studio-einstellungen", "Einstellungen", "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"], ["studio-protokoll", "Protokoll", "M12 8v4l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"]]],
     ["Experte", [["studio-modell", "Produktmodell", "M4 4h6v5H4zM14 15h6v5h-6zM4 15h6v5H4zM7 9v6M7 12h10v3"], ["studio-produkte", "Produkte", "M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7"], ["studio-merkmale", "Merkmale", "M4 6h10M4 12h16M4 18h7M17 4v4M14 16v4"]]]
   ];
   const ikon = d => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
   function navBauen() {
+    const R = K.Rechte, sichtbar = h => !R || R.seiteErlaubt(h);
     K.el("konf-nav").innerHTML = `<div class="marke"><b>Fahrzeug&shy;konfigurator</b><span>CPQ für Auflieger</span></div>` +
-      NAV.map(([titel, l]) => `<div class="navgruppe"><div class="navtitel">${titel}</div>${l.map(([h, n, d]) => `<a href="#${h}" data-r="${h}">${ikon(d)}<span>${n}</span><span class="badge" data-b="${h}" hidden></span></a>`).join("")}</div>`).join("") +
+      NAV.map(([titel, l]) => [titel, l.filter(([h]) => sichtbar(h))]).filter(([, l]) => l.length).map(([titel, l]) => `<div class="navgruppe"><div class="navtitel">${titel}</div>${l.map(([h, n, d]) => `<a href="#${h}" data-r="${h}">${ikon(d)}<span>${n}</span><span class="badge" data-b="${h}" hidden></span></a>`).join("")}</div>`).join("") +
       `<div class="navfuss" id="konf-navfuss"></div>`;
   }
   const gruppeVon = h => h === "studio-import-vorlage" || h === "studio-import-struktur" ? "studio-import" : h.startsWith("angebot-") ? "angebote" : h.startsWith("kunde-") ? "kunden" : h;
@@ -10854,7 +11007,7 @@
     const g = gruppeVon(h);
     K.root.querySelectorAll("#konf-nav a[data-r]").forEach(a => a.dataset.r === g ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
     const setze = (r, n) => { const b = K.root.querySelector(`[data-b="${r}"]`); if (b) { b.hidden = !n; b.textContent = n; } };
-    setze("angebote", S().angebote.filter(a => K.offeneFragen(a).length).length);
+    setze("angebote", (K.angeboteSichtbar ? K.angeboteSichtbar() : S().angebote).filter(a => K.offeneFragen(a).length).length);
     setze("studio-freigabe", K.freigabeOffen());
     const f = K.el("konf-navfuss"), m = K.Store.modus;
     f.innerHTML = m === "db" ? `<span class="punkt ${K.Store.schreiben ? "ok" : "warn"}"></span>${K.Store.schreiben ? "Gemeinsame Daten, live" : "Nur lesen"}` : m === "lokal" ? `<span class="punkt ${K.Store.applusQuellen ? "ok" : "warn"}"></span>${K.Store.applusQuellen ? "APplus-Daten, Änderungen lokal" : "Beispieldaten, im Browser gespeichert"}` : m === "demo" ? `<span class="punkt warn"></span>Demo-Modus, nichts wird gespeichert` : "Wird verbunden …";
@@ -10865,6 +11018,7 @@
     if (!S().einst || (!S().live && !S().entwurf)) {
       return `<div class="leer"><h2>Willkommen</h2><p>Der Datenspeicher ist noch leer.</p>${K.Store.schreiben ? `<p>Laden Sie das Startmodell mit Aufliegertypen, Regeln und Beispielkunden oder importieren Sie Ihre Excel-Datei.</p><div class="row"><button class="btn primary" type="button" data-act="startmodell">Startmodell laden</button><a class="btn" href="#studio-import">Excel importieren</a></div>` : "<p>Bitte wenden Sie sich an die Person, die diese Anwendung eingerichtet hat.</p>"}</div>`;
     }
+    if (K.Rechte && !K.Rechte.seiteErlaubt(K.ctx?.route || "")) return K.Rechte.sperre(K.ctx?.route || "");
     return null;
   };
 
@@ -10894,6 +11048,12 @@
     box.querySelector("pre").textContent = String(e && (e.stack || e.message) || e);
     r.insertBefore(box, r.firstChild);
   }
+  function rechteAnwenden() {
+    if (!K.Rechte) return; K.Rechte.bestimmen();
+    const mv = K.Rechte.meinVertrieb(); if (mv) K.Store.meinVertrieb = mv.id;
+    navBauen();
+  }
+  K.navBauen = () => navBauen();
   async function start() {
     try { await starten(); } catch (e) { startFehler(e); }
   }
@@ -10904,10 +11064,12 @@
     try { if (window.claude && window.claude.use) { const [d, a] = await Promise.all([window.claude.use("downloads"), window.claude.use("assets")]); K.downloads = d; K.assets = a; } } catch (e) {}
     K.Store.onChange(was => {
       if (was === "prefs") K.Store.meinVertrieb = S().prefs.vertrieb || null;
+      if (was === "alles") rechteAnwenden();
       K.datenGeaendert();
     });
     await K.Store.init();
     K.Store.meinVertrieb = S().prefs.vertrieb || null;
+    rechteAnwenden();
     K.render();
     if (K.Store.ladefehler && K.Store.ladefehler.length) K.toast(`${K.Store.ladefehler.length} APplus-Abfrage(n) nicht geladen, dort gelten Beispieldaten. Details in der Konsole.`);
   }
