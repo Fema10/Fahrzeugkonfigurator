@@ -31,7 +31,7 @@
      Übersicht
      ===================================================================== */
   K.route("start", () => {
-    const A = S().angebote, offen = A.filter(a => a.status === "entwurf" || a.status === "versendet");
+    const A = K.angeboteSichtbar(), offen = A.filter(a => a.status === "entwurf" || a.status === "versendet");
     const sum = a => E.summen(a, S().einst.mwst).netto;
     const woche = A.reduce((n, a) => n + K.aufrufe(a).filter(e => Date.now() - e.ts < 7 * 864e5).length, 0);
     const entsch = A.filter(a => a.status === "angenommen" || a.status === "abgelehnt");
@@ -90,7 +90,13 @@
   const nachfahren = (mo, gid) => { const out = [gid]; for (const k of kinder(mo, gid)) out.push(...nachfahren(mo, k.id)); return out; };
   const pfad = (mo, gid) => { const out = []; let g = mo.gruppen.find(x => x.id === gid); while (g) { out.unshift(g); g = mo.gruppen.find(x => x.id === g.eltern); } return out; };
   K.bildUrl = id => id ? "/_blob/" + id : null;
-  const produktBild = (p, farbe) => p.bild ? `<img src="${K.bildUrl(p.bild)}" alt="" loading="lazy">` : K.silhouette(p.visual?.typ, farbe || "var(--ink)");
+  /** Bild aus dem Artikelstamm (Spalte BILD/DOCUMENTS der Artikel-Abfrage) */
+  K.artikelBild = code => (code && K.Store.artikelZu(code)?.bild) || "";
+  /** Bild mit Ersatz: lädt das Bild nicht, erscheint die Grafik */
+  K.bildMitErsatz = (url, ersatz) => `<img src="${esc(url)}" alt="" loading="lazy" data-ersatz="${esc(ersatz)}">`;
+  K.produktBildHtml = (p, farbe) => { const ers = K.silhouette(p.visual?.typ, farbe || "var(--ink)"); if (p.bild) return `<img src="${K.bildUrl(p.bild)}" alt="" loading="lazy">`; const a = K.artikelBild(p.code); return a ? K.bildMitErsatz(a, ers) : ers; };
+  const produktBild = (p, farbe) => K.produktBildHtml(p, farbe);
+  document.addEventListener("error", e => { const t = e.target; if (t && t.tagName === "IMG" && t.dataset && t.dataset.ersatz != null && t.parentNode) { const d = document.createElement("span"); d.className = "bild-ersatz"; d.title = "Bild nicht geladen: " + t.src; d.innerHTML = t.dataset.ersatz; console.info("[Konfigurator] Bild nicht geladen:", t.src); t.replaceWith(d); } }, true);
   function gruppenBild(mo, g) {
     if (g.bild) return `<img src="${K.bildUrl(g.bild)}" alt="">`;
     const p = mo.produkte.find(x => nachfahren(mo, g.id).includes(x.gruppe));
@@ -106,11 +112,11 @@
         <div class="kachel-titel"><b>${esc(p.name)}</b><span class="info" title="${esc(p.beschreibung)}" tabindex="0" aria-label="${esc(p.beschreibung)}">i</span>
           <button type="button" class="stern" data-act="favorit" data-p="${p.id}" aria-pressed="${fav}" title="${fav ? "Aus Favoriten entfernen" : "Zu Favoriten"}">${fav ? "★" : "☆"}</button></div>
         <span class="mono klein gedimmt">${esc(p.code || p.artnr || "")}</span>
-        <div class="kachel-fuss"><span class="num">ab ${K.eur(mo ? abPreis(mo, p) : p.basispreis)}</span><button type="button" class="zahnrad" data-act="konfigStart" data-p="${p.id}" title="Konfigurieren" aria-label="Konfigurieren">⚙</button></div>
+        <div class="kachel-fuss"><span class="num">ab ${K.eur(mo ? abPreis(mo, p) : p.basispreis)}</span><span class="row kachel-knoepfe">${K.Store.schreiben && !K.kat.entwurf ? `<button type="button" class="zahnrad" data-act="kbBearbeiten" data-p="${p.id}" title="Im Katalog aufbauen bearbeiten" aria-label="${esc(p.name)} bearbeiten">✎</button><button type="button" class="zahnrad loeschen" data-act="katLoeschen" data-p="${p.id}" title="Löschen" aria-label="${esc(p.name)} löschen">🗑</button>` : ""}<button type="button" class="zahnrad" data-act="konfigStart" data-p="${p.id}" title="Konfigurieren" aria-label="Konfigurieren">⚙</button></span></div>
       </div></article>`;
   }
   function baum(mo, gid, tiefe) {
-    const zahl = id => mo.produkte.filter(p => p.aktiv !== false && nachfahren(mo, id).includes(p.gruppe)).length;
+    const zahl = id => mo.produkte.filter(p => p.aktiv !== false && K.produktSichtbar(mo, p) && nachfahren(mo, id).includes(p.gruppe)).length;
     return kinder(mo, gid).filter(g => zahl(g.id) > 0).map(g => {
       const hatKinder = kinder(mo, g.id).some(k => zahl(k.id) > 0), offen = K.kat.offen[g.id] ?? true, aktiv = K.kat.gruppe === g.id;
       const anzahl = zahl(g.id);
@@ -124,7 +130,7 @@
     const mo = K.kat.entwurf ? S().entwurf : live(); if (!mo) return keinModell();
     const k = K.kat, q = k.suche.toLowerCase(), fav = S().prefs.favoriten || [];
     const imBaum = k.gruppe === "fav" ? null : k.gruppe ? nachfahren(mo, k.gruppe) : null;
-    let prods = mo.produkte.filter(p => p.aktiv !== false)
+    let prods = mo.produkte.filter(p => p.aktiv !== false && K.produktSichtbar(mo, p))
       .filter(p => k.gruppe === "fav" ? fav.includes(p.id) : !imBaum || imBaum.includes(p.gruppe))
       .filter(p => !q || (p.name + " " + p.beschreibung + " " + (p.artnr || "") + " " + (p.code || "")).toLowerCase().includes(q));
     // Katalogfilter aus Merkmalen mit "katalogfilter" (z. B. Anzahl Achsen)
@@ -136,11 +142,13 @@
     for (const [mid, wid] of Object.entries(k.filter)) if (wid) prods = prods.filter(p => E.produktMerkmale(mo, p).some(x => x.m.id === mid && x.werte.some(v => v.id === wid)));
     const ziel = K.konf.ziel;
     const krumen = k.gruppe === "fav" ? ["Favoriten"] : ["Katalog", ...(k.gruppe ? pfad(mo, k.gruppe).map(g => g.name) : [])];
-    return `${K.kat.entwurf ? `<div class="hinweis warn" style="margin-bottom:12px"><b>Vorschau des Entwurfs.</b> So sieht der Katalog nach der Freigabe aus. <button class="btn klein" type="button" data-act="katZumBau">Zurück zum Aufbau</button> <a class="btn klein primary" href="#studio-freigabe">Freigeben</a></div>` : ""}${ziel ? `<div class="hinweis" style="margin-bottom:12px">Das konfigurierte Fahrzeug wird als neue Position in <b>${esc(ziel.nr)}</b> übernommen. <button class="btn klein" type="button" data-act="zielAbbrechen">Abbrechen</button></div>` : ""}
+    const offen = !K.kat.entwurf && K.freigabeOffen ? K.freigabeOffen() : 0;
+    const offenHinweis = offen ? `<div class="hinweis" style="margin-bottom:12px"><b>Der Katalog zeigt die freigegebene Version${live()?.version ? " " + live().version : ""}.</b> Im Studio gibt es ${offen === 1 ? "1 Änderung" : offen + " Änderungen"}, die noch nicht freigegeben ${offen === 1 ? "ist" : "sind"}. Erst nach der Freigabe sieht der Vertrieb den Stand aus „Katalog aufbauen“.${K.Store.schreiben ? ` <button class="btn klein" type="button" data-act="katEntwurfZeigen">Entwurf ansehen</button> <a class="btn klein primary" href="#studio-freigabe" data-act="katZurFreigabe">Zur Freigabe</a>` : ""}</div>` : "";
+    return `${offenHinweis}${K.kat.entwurf ? `<div class="hinweis warn" style="margin-bottom:12px"><b>Vorschau des Entwurfs.</b> So sieht der Katalog nach der Freigabe aus. <button class="btn klein" type="button" data-act="katZumBau">Zurück zum Aufbau</button> <a class="btn klein primary" href="#studio-freigabe">Freigeben</a></div>` : ""}${ziel ? `<div class="hinweis" style="margin-bottom:12px">Das konfigurierte Fahrzeug wird als neue Position in <b>${esc(ziel.nr)}</b> übernommen. <button class="btn klein" type="button" data-act="zielAbbrechen">Abbrechen</button></div>` : ""}
     <div class="katalog">
       <nav class="baum panel" aria-label="Produktgruppen">
         <input type="search" id="kat-suche" data-in="katSuche" placeholder="Suche im Katalog" value="${esc(k.suche)}">
-        <ul><li><div class="baum-zeile${!k.gruppe ? " aktiv" : ""}" style="--tiefe:0"><span class="baum-auf"></span><button type="button" class="baum-name" data-act="katGruppe" data-g="">Gesamter Katalog<span class="gedimmt klein">${mo.produkte.filter(p => p.aktiv !== false).length}</span></button></div>
+        <ul><li><div class="baum-zeile${!k.gruppe ? " aktiv" : ""}" style="--tiefe:0"><span class="baum-auf"></span><button type="button" class="baum-name" data-act="katGruppe" data-g="">Gesamter Katalog<span class="gedimmt klein">${mo.produkte.filter(p => p.aktiv !== false && K.produktSichtbar(mo, p)).length}</span></button></div>
           <ul>${baum(mo, "", 1)}</ul></li>
           <li><div class="baum-zeile${k.gruppe === "fav" ? " aktiv" : ""}" style="--tiefe:0"><span class="baum-auf"></span><button type="button" class="baum-name" data-act="katGruppe" data-g="fav">★ Favoriten<span class="gedimmt klein">${fav.length}</span></button></div></li></ul>
       </nav>
@@ -150,6 +158,18 @@
         ${prods.length ? `<div class="kacheln">${prods.map(p => produktKarte(p, mo)).join("")}</div>` : `<div class="leer">In dieser Auswahl gibt es keine Fahrzeuge.</div>`}
       </section></div>`;
   });
+  /** Fahrzeug im Studio › Katalog aufbauen öffnen (ändern, Codes, löschen) */
+  K.act.kbBearbeiten = el => { const pid = el.dataset.p, mo = S().entwurf; if (!mo) return;
+    if (!mo.produkte.some(x => x.id === pid)) { const lp = S().live?.produkte.find(x => x.id === pid);
+      return K.sheet(`<h3>${esc(lp?.name || "Fahrzeug")} löschen?</h3><p>Dieses Fahrzeug ist im Katalog aufbauen schon entfernt und steht nur noch hier im Katalog.</p>
+        <div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-act="sheetZu">Abbrechen</button><button class="btn gefahr" type="button" data-act="kbRestLoeschen" data-p="${esc(pid)}">Auch aus dem Katalog löschen</button></div><p class="klein gedimmt">Zurückholen danach über Studio › Protokoll.</p>`); }
+    K.kat.entwurf = false; K.konf.entwurf = false; K.kb.sel = "p:" + pid; K.kb.pos = null; K.kb.loeschen = null; K.gehe("studio-katalog"); };
+  /** Fahrzeug direkt aus dem Katalog löschen (Entwurf und Katalog, Kopie im Protokoll) */
+  K.act.katLoeschen = el => { const p = (S().live?.produkte || []).find(x => x.id === el.dataset.p) || E.produkt(S().entwurf, el.dataset.p); if (!p) return;
+    K.sheet(`<h3>${esc(p.name)} löschen?</h3><p>Das Fahrzeug wird aus dem Katalog und aus Katalog aufbauen entfernt. Bestehende Angebote behalten ihre Positionen.</p><div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-act="sheetZu">Abbrechen</button><button class="btn gefahr" type="button" data-act="kbRestLoeschen" data-p="${esc(p.id)}">Löschen</button></div><p class="klein gedimmt">Zurückholen über Studio › Protokoll.</p>`); };
+  K.act.konfAnsicht = () => { K.konf.zeige3d = !K.konf.zeige3d; K.render(); };
+  K.act.katEntwurfZeigen = () => { K.kat.entwurf = true; K.render(); };
+  K.act.katZurFreigabe = () => { K.sheetZu && K.sheetZu(); K.gehe("studio-freigabe"); };
   K.act.katZumBau = () => { K.kat.entwurf = false; K.gehe("studio-katalog"); };
   K.act.katGruppe = el => { K.kat.gruppe = el.dataset.g; K.render(); };
   K.act.katAuf = el => { K.kat.offen[el.dataset.g] = !(K.kat.offen[el.dataset.g] ?? true); K.render(); };
@@ -163,6 +183,7 @@
   /* Vorschaubild eines Werts: hochgeladenes Bild, Farbfeld oder schematische Grafik */
   K.wertGrafik = (m, w, i, p) => {
     if (w.bild) return `<img src="${K.bildUrl(w.bild)}" alt="" loading="lazy">`;
+    const ab = !w.hex && K.artikelBild(w.code); if (ab) return K.bildMitErsatz(ab, K.wertGrafik(m, Object.assign({}, w, { code: "" }), i, p));
     if (w.hex) return `<span class="farbkachel" style="background:${esc(w.hex)}"></span>`;
     const farben = ["#2E9E5B", "#1F3F9A", "#B23AC4", "#C8312B", "#2BB3A5", "#8A5A2B", "#D98C00", "#56606B"];
     const f = farben[i % farben.length], typ = p?.visual?.typ || "semi";
@@ -185,6 +206,7 @@
   };
   K.konfigOeffnen = (pid, sel, ziel, entwurf) => {
     const mo = entwurf ? S().entwurf : live(), p = E.produkt(mo, pid); if (!p) { K.toast("Dieses Fahrzeug gibt es im Modell nicht mehr."); return; }
+    if (!entwurf && !K.produktSichtbar(mo, p)) { K.toast("Dieses Fahrzeug ist für Sie nicht freigegeben."); return; }
     const s = K.clone(sel || {}); const notes = E.bereinige(mo, p, s);
     Object.assign(K.konf, { produkt: pid, sel: s, notes, ziel, tab: "Grundmaschine", entwurf: !!entwurf });
     K.gehe("konfig");
@@ -251,7 +273,7 @@
     const ga = p.grundausstattung || [];
     const gaHtml = !ga.length ? "" : `<details class="ga-block" ${k.gaOffen ? "open" : ""}><summary data-act="konfGa"><b>Grundausstattung</b><span class="gedimmt klein">${ga.length} Positionen inklusive</span></summary>
       ${[...new Set(ga.map(x => x.gruppe || ""))].map(gr => `${gr ? `<div class="eyebrow">${esc(gr)}</div>` : ""}<ul>${ga.filter(x => (x.gruppe || "") === gr).map(x => `<li><code>${esc(x.code)}</code> ${esc(x.name)}</li>`).join("")}</ul>`).join("")}</details>`;
-    if (!bereiche.length && !["kalkulation", "stueckliste"].includes(k.tab)) links = gaHtml || `<div class="leer">Für dieses Fahrzeug gibt es keine Auswahl.</div>`;
+    if (!bereiche.length && !["kalkulation", "stueckliste"].includes(k.tab)) links = gaHtml || `<div class="leer konf-leer"><b>Für dieses Fahrzeug sind noch keine Codes hinterlegt.</b><br>Es wird mit dem Grundpreis${p.basispreis ? ` von ${K.eur(p.basispreis)}` : ""} angeboten.${K.Store.schreiben ? `<br><br><button class="btn primary" type="button" data-act="kbBearbeiten" data-p="${p.id}">Codes im Katalog aufbauen hinzufügen</button>` : ""}</div>`;
     else if (bereiche.includes(k.tab)) {
       const imBereich = pm.filter(x => E.bereich(x.m) === k.tab), abschnitte = [...new Set(imBereich.map(x => x.m.abschnitt || ""))];
       links = (k.tab === bereiche[0] ? gaHtml : "") + abschnitte.map(ab => `<section class="abschnittblock">${ab && ab !== k.tab ? `<h2>${esc(ab)}</h2>` : ""}${imBereich.filter(x => (x.m.abschnitt || "") === ab).map(x => merkmalHtml(mo, p, x.m, x.werte, g, gs, k.sel)).join("")}</section>`).join("");
@@ -267,16 +289,16 @@
         <tr class="summe"><td colspan="3">Summe je Fahrzeug</td><td class="r num">${K.eur(preis.einzel)}</td><td class="r num">${K.eur(preis.kosten)}</td><td class="r num">${K.eur(db)}</td></tr></tbody></table></div>
         <p class="klein gedimmt" style="margin-top:8px">Marge ${K.zahl(marge, 1)} %. Kalkulationswerte sind intern und erscheinen nicht im Angebot.</p>`;
     }
-    const ziel = k.ziel;
+    const ziel = k.ziel, foto = p.bild ? K.bildUrl(p.bild) : K.artikelBild(p.code);
     K.nach(v => { const pl = v.querySelector("[data-viewer]"); if (pl) K.viewerEinhaengen(pl, mo, p, k.sel); });
     const zahl = b => offenAlle.filter(m => E.bereich(m) === b).length;
     const uebernehmenText = k.entwurf ? "" : ziel && ziel.idx != null ? `Position ${(ziel.idx + 1) * 10} aktualisieren` : ziel ? `In ${esc(ziel.nr)} übernehmen` : "Übernehmen";
-    return `${k.entwurf ? `<div class="hinweis warn" style="margin-bottom:10px">Sie testen den <b>Entwurf</b> des Modells. Das Ergebnis kann nicht in Angebote übernommen werden. <a href="#studio-regeln">Zurück ins Studio</a></div>` : ""}
+    return `${k.entwurf ? `<div class="hinweis warn" style="margin-bottom:10px">Sie testen den <b>Entwurf</b> des Modells. Das Ergebnis kann nicht in Angebote übernommen werden. <button type="button" class="link" data-act="kbBearbeiten" data-p="${p.id}">Zurück zum Katalog aufbauen</button></div>` : ""}
     <header class="konf-bar">
       <span class="kb-bild">${produktBild(p, "currentColor")}</span>
       <div class="kb-name"><b>${esc(p.name)}</b><span class="mono">${esc(p.code || p.artnr || "")}</span></div>
       <span class="kb-version">${k.entwurf ? "Entwurf" : "Modell v" + mo.version}</span>
-      <div class="kb-preis num">${K.eur2(preis.einzel)}</div>
+      <div class="kb-preis num">${preis.einzel || preis.zeilen.some(z => z.preis) ? K.eur2(preis.einzel) : `<span class="kb-preis-fehlt" title="Weder Grundpreis noch Preise an den Codes hinterlegt">kein Preis hinterlegt</span>`}</div>
       ${uebernehmenText ? `<button class="btn gelb" type="button" data-act="konfUebernehmen">✓ ${uebernehmenText}</button>` : ""}
       ${ziel && ziel.idx != null ? `<button class="btn kb-btn" type="button" data-act="konfZielLoesen">Als neue Position</button>` : ""}
       <button class="btn kb-btn" type="button" data-act="konfSchliessen">✕ Schließen</button>
@@ -290,12 +312,12 @@
         <div class="abschnitte">${links}</div>
       </div>
       <aside class="side">
-        <div class="panel ansicht"><div data-viewer class="viewerplatz"></div>
-          <div class="row zwischen" style="padding:0 4px"><span class="gedimmt klein">${offenAlle.length ? `⚠ ${offenAlle.length} Pflichtangaben offen` : "Konfiguration vollständig"}</span>
-            <span class="row"><button class="btn klein" type="button" data-act="export3d" data-f="png">Bild speichern</button><button class="btn klein" type="button" data-act="export3d" data-f="glb">3D-Szene exportieren</button></span></div></div>
+        <div class="panel ansicht${foto && !k.zeige3d ? " mit-foto" : ""}">${foto && !k.zeige3d ? `<div class="viewerplatz fotoplatz">${K.bildMitErsatz(foto, `<div class="v3d-leer">${K.silhouette(p.visual?.typ, "var(--muted)")}</div>`)}</div>` : `<div data-viewer class="viewerplatz"></div>`}
+          <div class="row zwischen" style="padding:0 4px"><span class="gedimmt klein">${offenAlle.length ? `⚠ ${offenAlle.length} Pflichtangaben offen` : bereiche.length ? "Konfiguration vollständig" : ""}</span>
+            <span class="row">${foto ? `<button class="btn klein" type="button" data-act="konfAnsicht">${k.zeige3d ? "Foto" : "3D-Ansicht"}</button>` : ""}<span class="nur3d row"><button class="btn klein" type="button" data-act="export3d" data-f="png">Bild speichern</button><button class="btn klein" type="button" data-act="export3d" data-f="glb">3D-Szene exportieren</button></span></span></div></div>
         <details class="panel regeln"><summary>Aktive Regeln (${regeln.length})</summary>
           <ul class="regelliste">${regeln.map(r => `<li><span class="mono">${r.id}</span><span>${esc(r.hinweis || E.satz(mo, r))}</span></li>`).join("") || "<li><span></span><span>Keine Einschränkungen aktiv.</span></li>"}</ul></details>
-        <div class="row"><button class="btn klein" type="button" data-act="konfReset">Auswahl zurücksetzen</button><select id="konf-produkt" data-act="konfProdukt" aria-label="Grundfahrzeug wechseln">${mo.produkte.filter(x => x.aktiv !== false).map(x => `<option value="${x.id}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div>
+        <div class="row"><button class="btn klein" type="button" data-act="konfReset">Auswahl zurücksetzen</button><select id="konf-produkt" data-act="konfProdukt" aria-label="Grundfahrzeug wechseln">${mo.produkte.filter(x => x.aktiv !== false && K.produktSichtbar(mo, x)).map(x => `<option value="${x.id}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div>
       </aside></div>`;
   });
   K.act.konfTab = el => { K.konf.tab = el.dataset.t; K.render(); };
@@ -342,7 +364,7 @@
       else a.positionen.push(neu);
       K.Store.angebotSpeichern(a); const nr = a.nr; k.ziel = null; K.toast("Position übernommen"); K.gehe("angebot-" + nr); return;
     }
-    const offen = S().angebote.filter(a => a.status === "entwurf").sort((x, y) => y.erstellt - x.erstellt);
+    const offen = K.angeboteSichtbar().filter(a => a.status === "entwurf").sort((x, y) => y.erstellt - x.erstellt);
     K.sheet(`<h3>In Angebot übernehmen</h3>
       <div class="feld"><label for="ua-kunde">Neues Angebot für</label><select id="ua-kunde">${kundenOptionen()}</select></div>
       <div class="row"><button class="btn primary" type="button" data-act="uebernehmenNeu">Neues Angebot anlegen</button></div>
@@ -363,7 +385,7 @@
     const nr = num.nr; if (num.quelle === "ersatz") K.toast("APplus hat keine Nummer geliefert, vorläufige Nummer " + nr + " vergeben.");
     const ich = K.Store.meinVertrieb || e.vertrieb[0]?.id;
     const a = { nr, kundeId: kid, kunde: k ? { firma: k.firma, person: k.person, strasse: k.strasse, ort: k.ort, mail: k.mail } : { firma: "", person: "", strasse: "", ort: "" },
-      bearbeiter: ich, erstellt: Date.now(), gueltig: Date.now() + e.gueltigTage * 864e5, status: "entwurf", positionen: [], rabatt: 0,
+      bearbeiter: ich, erstelltVon: K.Rechte?.benutzer?.login || K.Rechte?.benutzer?.personal || "", erstellt: Date.now(), gueltig: Date.now() + e.gueltigTage * 864e5, status: "entwurf", positionen: [], rabatt: 0,
       texte: { einleitung: e.vorlage.einleitung, lieferung: e.vorlage.lieferung, zahlung: e.vorlage.zahlung, gewaehrleistung: e.vorlage.gewaehrleistung, schluss: e.vorlage.schluss },
       token: null, freigegeben: false, events: [], nrQuelle: num.quelle, kundeNr: k?.nr || "" };
     { const b = (e.vertrieb || []).find(v => v.id === ich); if (b) a.bearbeiterInfo = { name: b.name, tel: b.tel, mail: b.mail, nr: b.nr || "" }; }
@@ -380,13 +402,13 @@
   K.ang = { status: "alle", suche: "" };
   K.route("angebote", () => {
     const f = K.ang, q = f.suche.toLowerCase();
-    const liste = [...S().angebote].sort((a, b) => b.erstellt - a.erstellt)
+    const liste = [...K.angeboteSichtbar()].sort((a, b) => b.erstellt - a.erstellt)
       .filter(a => f.status === "alle" || (f.status === "heiss" ? K.heiss(a) : a.status === f.status))
       .filter(a => !q || (a.nr + " " + a.kunde.firma + " " + a.positionen.map(p => p.produktName || p.text).join(" ")).toLowerCase().includes(q));
-    const zahl = s => S().angebote.filter(a => s === "heiss" ? K.heiss(a) : a.status === s).length;
+    const zahl = s => K.angeboteSichtbar().filter(a => s === "heiss" ? K.heiss(a) : a.status === s).length;
     return kopf("Vertrieb", "Angebote", "", `<button class="btn primary" type="button" data-act="angebotNeu">Neues Angebot</button>`) + `
       <div class="filterleiste"><div class="segment" role="group" aria-label="Status">
-        ${[["alle", "Alle", S().angebote.length], ["heiss", "Heiß", zahl("heiss")], ...Object.entries(STATUS).map(([k, v]) => [k, v, zahl(k)])].map(([id, n, c]) => `<button type="button" data-act="angStatus" data-s="${id}" aria-pressed="${f.status === id}">${n} <span class="zaehler">${c}</span></button>`).join("")}
+        ${[["alle", "Alle", K.angeboteSichtbar().length], ["heiss", "Heiß", zahl("heiss")], ...Object.entries(STATUS).map(([k, v]) => [k, v, zahl(k)])].map(([id, n, c]) => `<button type="button" data-act="angStatus" data-s="${id}" aria-pressed="${f.status === id}">${n} <span class="zaehler">${c}</span></button>`).join("")}
       </div><input type="search" id="ang-suche" data-in="angSuche" placeholder="Nummer, Kunde oder Fahrzeug" value="${esc(f.suche)}"></div>
       ${angebotsTabelle(liste)}`;
   });
@@ -533,7 +555,7 @@
     return kopf("Vertrieb", "Kunden", "", `<a class="btn primary" href="#kunde-neu">Neuer Kunde</a>`) + `
       <div class="filterleiste"><input type="search" id="kd-suche" data-in="kdSuche" placeholder="Firma, Ort, Ansprechpartner oder Kundennummer" value="${esc(K.kd.suche)}"></div>
       ${liste.length ? `<div class="tabwrap"><table class="klickbar"><thead><tr><th>Nr.</th><th>Firma</th><th>Ansprechpartner</th><th>Ort</th><th class="r">Angebote</th><th class="r">Volumen netto</th></tr></thead><tbody>
-      ${liste.map(k => { const as = S().angebote.filter(a => a.kundeId === k.id); return `<tr data-act="oeffne" data-ziel="kunde-${k.id}" tabindex="0"><td class="mono">${esc(k.nr)}</td><td><b>${esc(k.firma)}</b></td><td>${esc(k.person)}</td><td class="gedimmt">${esc(k.ort)}</td><td class="r num">${as.length}</td><td class="r num">${K.eur(as.reduce((n, a) => n + E.summen(a, S().einst.mwst).netto, 0))}</td></tr>`; }).join("")}
+      ${liste.map(k => { const as = K.angeboteSichtbar().filter(a => a.kundeId === k.id); return `<tr data-act="oeffne" data-ziel="kunde-${k.id}" tabindex="0"><td class="mono">${esc(k.nr)}</td><td><b>${esc(k.firma)}</b></td><td>${esc(k.person)}</td><td class="gedimmt">${esc(k.ort)}</td><td class="r num">${as.length}</td><td class="r num">${K.eur(as.reduce((n, a) => n + E.summen(a, S().einst.mwst).netto, 0))}</td></tr>`; }).join("")}
       </tbody></table></div>` : `<div class="leer">Keine Kunden gefunden.</div>`}`;
   });
   K.inp.kdSuche = el => { K.kd.suche = el.value; K.render(); };
@@ -542,7 +564,7 @@
     const neu = id === "neu";
     let k = neu ? (K.kdEntwurf ||= { id: K.id("k"), nr: String(10000 + Math.floor(Math.random() * 9000)), firma: "", person: "", strasse: "", ort: "", land: "DE", mail: "", tel: "", notiz: "" }) : S().kunden.find(x => x.id === id);
     if (!k) return `<div class="leer">Kunde nicht gefunden.</div>`;
-    const as = S().angebote.filter(a => a.kundeId === k.id).sort((a, b) => b.erstellt - a.erstellt);
+    const as = K.angeboteSichtbar().filter(a => a.kundeId === k.id).sort((a, b) => b.erstellt - a.erstellt);
     const f = (key, l, typ = "text", breit) => `<div class="feld${breit ? " breit" : ""}"><label for="kd-${key}">${l}</label><input id="kd-${key}" type="${typ}" data-in="kdFeld" data-k="${key}" data-id="${neu ? "neu" : k.id}" value="${esc(k[key])}" ${K.Store.schreiben ? "" : "disabled"}></div>`;
     return kopf("Kunde", neu ? "Neuer Kunde" : esc(k.firma), "", neu ? `<button class="btn primary" type="button" data-act="kdAnlegen">Kunde anlegen</button>` : `<button class="btn" type="button" data-act="kdAngebot" data-id="${k.id}">Neues Angebot</button><button class="btn gefahr-text" type="button" data-act="kdLoeschen" data-id="${k.id}">Löschen</button>`) + `
       <section class="panel"><div class="formgitter">${f("firma", "Firma", "text", true)}${f("nr", "Kundennummer")}${f("person", "Ansprechpartner")}${f("strasse", "Straße")}${f("ort", "PLZ und Ort")}${f("mail", "E-Mail", "email")}${f("tel", "Telefon", "tel")}

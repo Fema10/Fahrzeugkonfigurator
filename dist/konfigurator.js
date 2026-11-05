@@ -1,5 +1,5 @@
 /* =====================================================================
-   Fahrzeugkonfigurator 2026-11-04
+   Fahrzeugkonfigurator 2026-11-05
    ---------------------------------------------------------------------
    EINBINDUNG IN EIN APPLUS-DASHBOARD
    konfigurator.css und konfigurator.js wie gewohnt im Dashboard hinterlegen.
@@ -3255,12 +3255,12 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     hash: !!(window.claude && window.claude.use),
     storageKey: "konf-v1",
     /** APplus-Abfragen. Leer lassen = Beispieldaten. Format siehe LIESMICH. */
-    queries: { codes: "", produkte: "", merkmale: "", regeln: "", katalog: "", stueckliste: "", kunden: "", artikel: "", vertrieb: "", angebotsnummer: "" },
+    queries: { codes: "", produkte: "", merkmale: "", regeln: "", katalog: "", stueckliste: "", kunden: "", artikel: "", vertrieb: "", angebotsnummer: "", benutzer: "", rechte: "" },
     /** Optional: eigene Funktion, die eine Angebotsnummer im ERP reserviert, z. B. über einen Webdienst.
         async (einst) => "AN-2026-01234"  – hat Vorrang vor der Abfrage. */
     angebotsnummer: null,
     /** Spalten der Artikel-Abfrage (Tabelle ARTIKEL). Erste vorhandene Spalte gewinnt, Groß/Klein egal. */
-    artikelSpalten: { code: ["ARTIKEL"], name: ["NAME", "BEZEICHNUNG", "ARTIKELBEZEICHNUNG", "BEZ", "TEXT", "KURZTEXT"], preis: ["VKPREIS", "VK_PREIS", "LISTENPREIS", "PREIS"], kosten: ["HERSTELLKOSTEN", "KOSTEN", "EKPREIS", "EK_PREIS", "SELBSTKOSTEN"], me: ["ME", "MENGENEINHEIT", "EINHEIT"], gruppe: ["ARTIKELGRUPPE", "WARENGRUPPE", "GRUPPE"] },
+    artikelSpalten: { code: ["ARTIKEL"], bild: ["BILD", "BILDURL", "DOCUMENTS", "IMAGE", "FOTO"], name: ["NAME", "BEZEICHNUNG", "ARTIKELBEZEICHNUNG", "BEZ", "TEXT", "KURZTEXT"], preis: ["VKPREIS", "VK_PREIS", "LISTENPREIS", "PREIS", "NETTO", "NETTOPREIS"], kosten: ["HERSTELLKOSTEN", "KOSTEN", "EKPREIS", "EK_PREIS", "SELBSTKOSTEN"], me: ["ME", "MENGENEINHEIT", "EINHEIT"], gruppe: ["ARTIKELGRUPPE", "WARENGRUPPE", "GRUPPE"] },
     loadQuery: async function (name) {
       if (!name || location.protocol === "file:") return null;
       const app = location.pathname.split("/").slice(0, 2).join("/");
@@ -3950,8 +3950,21 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
 
     /* ---------- Betrieb ohne Claude (z. B. APplus): Browser-Speicher + APplus-Abfragen ---------- */
     _schluessel() { return (K.cfg && K.cfg.storageKey) || "konf-v1"; },
+    /** Abfragenamen: aus KONF_CONFIG, überschrieben durch Studio › Einstellungen › APplus-Abfragen */
+    abfragen() {
+      const aus = Object.assign({}, (K.cfg && K.cfg.queries) || {});
+      let e = this.S && this.S.einst; if (!e) try { e = (JSON.parse(localStorage.getItem(this._schluessel()) || "null") || {}).einst; } catch (x) { e = null; }
+      for (const [k, v] of Object.entries((e && e.abfragen) || {})) if (v != null && String(v).trim() !== "") aus[k] = String(v).trim();
+      if (location.protocol !== "file:") for (const [k, v] of Object.entries(this.STANDARD_ABFRAGEN)) if (!aus[k]) aus[k] = v;
+      return aus;
+    },
+    abfrageStatus: {},
+    /** Vorgabe-Namen: wenn nichts eingetragen ist, wird es mit diesen Abfragen versucht (Fehler dann ohne Meldung) */
+    STANDARD_ABFRAGEN: { benutzer: "apx_Benutzer", rechte: "apx_Rechte" },
+    _standardAbfrage(typ, name) { return this.STANDARD_ABFRAGEN[typ] === name && !((K.cfg.queries || {})[typ]) && !(((this.S && this.S.einst) || {}).abfragen || {})[typ]; },
     async ladeLokal() {
       const S = this.S; let gespeichert = null;
+      if (this._lokalTimer && S.geladen) this._lokalSchreiben(); // noch offene Änderungen zuerst sichern
       try { gespeichert = JSON.parse(localStorage.getItem(this._schluessel()) || "null"); } catch (e) { gespeichert = null; }
       const d = await this.demoDaten();
       const q = await this._applusLaden();
@@ -3964,29 +3977,32 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
       }
       if (q.kunden) S.kunden = q.kunden;
       if (q.vertrieb && q.vertrieb.length) { S.einst ||= d.einstellungen; S.einst.vertrieb = q.vertrieb; S.einst.vertriebQuelle = "applus"; }
+      this.benutzerZeilen = q.benutzer || null; this.rechteZeilen = q.rechte || null;
       const ex = q.artikel ? null : this._artikelAusExcel();
       this.artikelSetzen(q.artikel || ex || d.artikel || [], q.artikel ? "applus" : ex && ex.length ? "excel" : "beispiel");
-      if (q.artikel) this.stammAnwenden();
+      if (q.artikel) try { this.stammAnwenden(); } catch (e) { console.warn("[Konfigurator] Stammabgleich mit ARTIKEL übersprungen:", e); }
       if (!S.einst) S.einst = d.einstellungen;
       S.prefs ||= { favoriten: [] }; S.quelle = q.modell ? "applus" : "lokal"; S.geladen = true;
       this._melde("alles");
     },
     async _applusLaden() {
-      const out = {}, cfg = K.cfg || {}, qs = cfg.queries || {}; this.ladefehler = []; this.applusQuellen = 0;
+      const out = {}, cfg = K.cfg || {}, qs = this.abfragen(); this.ladefehler = []; this.applusQuellen = 0; this.abfrageStatus = {};
       if (!cfg.loadQuery) return out;
       const blaetter = {};
-      await Promise.all(["katalog", "produkte", "merkmale", "codes", "regeln", "stueckliste", "kunden", "artikel", "vertrieb"].map(async typ => {
+      await Promise.all(["katalog", "produkte", "merkmale", "codes", "regeln", "stueckliste", "kunden", "artikel", "vertrieb", "benutzer", "rechte"].map(async typ => {
         if (!qs[typ]) return;
         try {
           const rows = await cfg.loadQuery(qs[typ], typ);
-          if (!Array.isArray(rows)) return;
+          if (!Array.isArray(rows)) { this.abfrageStatus[typ] = { name: qs[typ], fehler: location.protocol === "file:" ? "nur innerhalb von APplus abrufbar" : "keine Daten geliefert" }; return; }
+          this.abfrageStatus[typ] = { name: qs[typ], zeilen: rows.length };
           this.applusQuellen++;
           if (typ === "kunden") { out.kunden = rows.map(kundeAusZeile).filter(k => k.firma); return; }
           if (typ === "vertrieb") { out.vertrieb = rows.map(vertriebAusZeile).filter(v => v.name); return; }
           if (typ === "artikel") { out.artikel = rows; return; }
+          if (typ === "benutzer" || typ === "rechte") { out[typ] = rows; return; }
           const kopf = [...new Set(rows.flatMap(r => Object.keys(r)))];
           blaetter[typ] = [kopf, ...rows.map(r => kopf.map(h => r[h] ?? ""))];
-        } catch (e) { console.warn("[Konfigurator] Abfrage fehlgeschlagen:", qs[typ], e); this.ladefehler.push(qs[typ] + ": " + (e.message || e)); }
+        } catch (e) { console.warn("[Konfigurator] Abfrage fehlgeschlagen:", qs[typ], e); if (!this._standardAbfrage(typ, qs[typ])) this.ladefehler.push(qs[typ] + ": " + (e.message || e)); this.abfrageStatus[typ] = { name: qs[typ], fehler: e.message || String(e) }; }
       }));
       if (Object.keys(blaetter).length && K.X) {
         const zuo = K.X.zuordnungVorschlagen(blaetter, (this.S.einst || {}).importZuordnung);
@@ -3998,15 +4014,22 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     },
     /* ---------- Artikelstamm (APplus-Tabelle ARTIKEL, Feld ARTIKEL) ---------- */
     artikel: new Map(), artikelQuelle: null,
+    /** Bildadressen neu bilden, z. B. nach Änderung der Adresse vor dem Bildpfad */
+    /** APplus legt Dokumente unter <App>/DocLib/ ab, z. B. https://erp/APplusProd/DocLib/WK3/WK367.png */
+    bildBasisStandard() { if (location.protocol === "file:") return ""; const app = location.pathname.split("/").slice(0, 2).join("/"); return app ? app + "/DocLib/" : ""; },
+    bilderNeu() { if (!this.bildAus) return; for (const a of this.artikel.values()) a.bild = this.bildAus(a.bildRoh); },
     artikelSetzen(rows, quelle) {
+      // Bildspalte: Adresse oder HTML wie <img src="…">; Backslashes im Pfad werden zu /
+      const bildAus = this.bildAus = v => { let t = String(v || "").trim(); if (!t) return ""; const m = t.match(/src\s*=\s*["']([^"']+)["']/i); if (m) t = m[1]; t = t.replace(/\\/g, "/"); const basis = String((this.S && this.S.einst && this.S.einst.bildBasis) || (K.cfg && K.cfg.bildBasis) || this.bildBasisStandard()).trim(); if (basis && !/^([a-z]+:|\/\/|\/)/i.test(t)) t = (basis.endsWith("/") ? basis : basis + "/") + t.replace(/^\.?\//, ""); return t; };
       const sp = (K.cfg && K.cfg.artikelSpalten) || {}, map = new Map();
       const norm = s => String(s).toUpperCase().replace(/[^A-Z0-9]/g, "");
-      for (const r of rows || []) {
-        const n = {}; for (const [k, v] of Object.entries(r)) n[norm(k)] = v;
+      for (const r of Array.isArray(rows) ? rows : []) {
+        if (!r || typeof r !== "object") continue; const n = {}; for (const [k, v] of Object.entries(r)) n[norm(k)] = v;
         const f = (key, fallback) => { for (const c of (sp[key] || []).concat(fallback || [])) { const v = n[norm(c)]; if (v != null && String(v).trim() !== "") return v; } return ""; };
         const code = String(f("code", ["code", "artikel"])).trim(); if (!code) continue;
-        const zahl = v => typeof v === "number" ? v : (K.X ? K.X.zahl(v) : parseFloat(String(v).replace(",", ".")) || 0);
-        map.set(code.toUpperCase(), { code, name: String(f("name", ["name"])).trim(), preis: zahl(f("preis", ["preis"])), kosten: zahl(f("kosten", ["kosten"])), me: String(f("me", ["me"])).trim(), gruppe: String(f("gruppe", ["gruppe"])).trim() });
+        // Leere oder fehlende Spalte = kein Wert (null), damit z. B. eine Abfrage nur mit ARTIKEL und NAME keine Preise auf 0 setzt
+        const zahl = v => v === "" || v == null ? null : typeof v === "number" ? v : (K.X ? K.X.zahl(v) : parseFloat(String(v).replace(",", ".")) || 0);
+        map.set(code.toUpperCase(), { code, name: String(f("name", ["name"])).trim(), preis: zahl(f("preis", ["preis"])), kosten: zahl(f("kosten", ["kosten"])), me: String(f("me", ["me"])).trim(), gruppe: String(f("gruppe", ["gruppe"])).trim(), bildRoh: String(f("bild", ["bild"]) || ""), bild: bildAus(f("bild", ["bild"])) });
       }
       this.artikel = map; this.artikelQuelle = map.size ? quelle : null;
     },
@@ -4028,12 +4051,12 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
       if (this.artikelQuelle !== "applus") return 0; let n = 0;
       for (const mo of [this.S.live, this.S.entwurf]) {
         if (!mo) continue;
-        for (const m of mo.merkmale || []) for (const w of m.werte) {
-          if (w.apStamm === false || !w.code) continue; const a = this.artikelZu(w.code); if (!a) continue;
+        for (const m of Array.isArray(mo.merkmale) ? mo.merkmale : []) for (const w of Array.isArray(m && m.werte) ? m.werte : []) {
+          if (!w || w.apStamm === false || !w.code) continue; const a = this.artikelZu(w.code); if (!a) continue;
           if (a.name && w.name !== a.name) { w.name = a.name; n++; } if (a.preis != null && w.preis !== a.preis) { w.preis = a.preis; n++; } if (a.kosten && w.kosten !== a.kosten) w.kosten = a.kosten;
         }
-        for (const p of mo.produkte || []) {
-          if (p.apStamm === false || !p.code) continue; const a = this.artikelZu(p.code); if (!a) continue;
+        for (const p of Array.isArray(mo.produkte) ? mo.produkte : []) {
+          if (!p || p.apStamm === false || !p.code) continue; const a = this.artikelZu(p.code); if (!a) continue;
           if (a.preis && p.basispreis !== a.preis) { p.basispreis = a.preis; n++; } if (a.kosten) p.basiskosten = a.kosten;
         }
       }
@@ -4054,11 +4077,13 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     _lokalSichern() {
       if (this.modus !== "lokal") return;
       clearTimeout(this._lokalTimer);
-      this._lokalTimer = setTimeout(() => {
-        const S = this.S;
-        try { localStorage.setItem(this._schluessel(), JSON.stringify({ entwurf: S.entwurf, live: S.live, kunden: S.kunden, angebote: S.angebote, einst: S.einst, releases: S.releases, protokoll: S.protokoll, prefs: S.prefs, quelle: S.quelle })); }
-        catch (e) { console.warn("[Konfigurator] Browser-Speicher voll oder gesperrt", e); }
-      }, 400);
+      this._lokalTimer = setTimeout(() => this._lokalSchreiben(), 400);
+      if (!this._beimVerlassen) { this._beimVerlassen = true; window.addEventListener("pagehide", () => { if (this._lokalTimer) this._lokalSchreiben(); }); }
+    },
+    _lokalSchreiben() {
+      clearTimeout(this._lokalTimer); this._lokalTimer = null; const S = this.S;
+      try { localStorage.setItem(this._schluessel(), JSON.stringify({ entwurf: S.entwurf, live: S.live, kunden: S.kunden, angebote: S.angebote, einst: S.einst, releases: S.releases, protokoll: S.protokoll, prefs: S.prefs, quelle: S.quelle })); }
+      catch (e) { console.warn("[Konfigurator] Browser-Speicher voll oder gesperrt", e); }
     },
     lokalZuruecksetzen() { try { localStorage.removeItem(this._schluessel()); } catch (e) {} },
 
@@ -4147,6 +4172,53 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
       this._entwurfOffen = false;
       await this.log("Freigabe", "Entwurf verworfen, Stand der Version " + this.S.live.version + " wiederhergestellt");
       this._melde("entwurf");
+    },
+    /**
+     * Fahrzeuge und Familien endgültig löschen: aus dem Entwurf UND dem freigegebenen Katalog.
+     * Eine Kopie steht im Protokoll und lässt sich dort zurückholen.
+     * auswahl = { produkte: [ids], gruppen: [ids], alles: bool }
+     */
+    async endgueltigLoeschen(auswahl, text) {
+      const S = this.S, E = K.E, modelle = [S.entwurf, S.live].filter((m, i, a) => m && a.indexOf(m) === i);
+      const snap = { produkte: [], gruppen: [], merkmale: [], regeln: [] }, hat = { p: new Set(), g: new Set(), m: new Set(), r: new Set() };
+      const merke = (art, liste, o) => { if (o && !hat[art].has(o.id)) { hat[art].add(o.id); liste.push(clone(o)); } };
+      for (const mo of modelle) {
+        const gids = new Set(auswahl.alles ? mo.gruppen.map(g => g.id) : []);
+        for (const g of auswahl.gruppen || []) { gids.add(g); let neu = true; while (neu) { neu = false; for (const x of mo.gruppen) if (x.eltern && gids.has(x.eltern) && !gids.has(x.id)) { gids.add(x.id); neu = true; } } }
+        const pids = new Set([...(auswahl.produkte || []), ...mo.produkte.filter(p => auswahl.alles || gids.has(p.gruppe)).map(p => p.id)]);
+        for (const g of mo.gruppen) if (gids.has(g.id)) merke("g", snap.gruppen, g);
+        for (const p of mo.produkte) if (pids.has(p.id)) merke("p", snap.produkte, p);
+        const zu = [...mo.produkte.filter(p => pids.has(p.id)).flatMap(p => p.merkmale || []), ...mo.gruppen.filter(g => gids.has(g.id)).flatMap(g => g.merkmale || [])];
+        for (const z of zu) merke("m", snap.merkmale, E.merkmal(mo, z.id));
+        for (const r of mo.regeln) if (auswahl.alles || (r.produkte || []).some(x => pids.has(x)) || (r.gruppen || []).some(x => gids.has(x))) merke("r", snap.regeln, r);
+        E.ausGeltungEntfernen(mo, [...gids], [...pids]);
+        mo.produkte = mo.produkte.filter(p => !pids.has(p.id)); mo.gruppen = mo.gruppen.filter(g => !gids.has(g.id));
+        if (auswahl.alles) { for (const m of mo.merkmale) merke("m", snap.merkmale, m); for (const r of mo.regeln) merke("r", snap.regeln, r); mo.merkmale = []; mo.regeln = []; }
+      }
+      clearTimeout(this._entwurfTimer); await this._entwurfSichern();
+      if (S.live && S.live !== S.entwurf) await this._set("modell/live", clone(S.live)).catch(() => {});
+      await this.log("Gelöscht", text || `${snap.produkte.length} Fahrzeuge, ${snap.gruppen.length} Familien gelöscht`, { art: "geloescht", ...snap });
+      this._melde("live"); this._melde("entwurf");
+      return snap;
+    },
+    /** Gelöschtes aus einem Protokolleintrag wieder in Entwurf und Katalog einfügen (Vorhandenes bleibt unverändert) */
+    async wiederherstellen(ts) {
+      const S = this.S, e = S.protokoll.flatMap(p => p.eintraege).find(x => x.ts === ts && x.daten && x.daten.art === "geloescht"); if (!e) return 0;
+      const d = e.daten, modelle = [S.entwurf, S.live].filter((m, i, a) => m && a.indexOf(m) === i); let n = 0;
+      for (const mo of modelle) {
+        const gIds = new Set(mo.gruppen.map(g => g.id));
+        const offen = d.gruppen.filter(g => !gIds.has(g.id));
+        while (offen.length) { const i = offen.findIndex(g => !g.eltern || gIds.has(g.eltern) || !offen.some(x => x.id === g.eltern)); const g = clone(offen.splice(i < 0 ? 0 : i, 1)[0]); if (g.eltern && !gIds.has(g.eltern) && !d.gruppen.some(x => x.id === g.eltern)) g.eltern = null; mo.gruppen.push(g); gIds.add(g.id); }
+        for (const m of d.merkmale) { const da = mo.merkmale.find(x => x.id === m.id); if (!da) mo.merkmale.push(clone(m)); else for (const w of m.werte || []) if (!da.werte.some(v => v.id === w.id)) da.werte.push(clone(w)); }
+        for (const p of d.produkte) if (!mo.produkte.some(x => x.id === p.id)) { mo.produkte.push(clone(p)); if (mo === S.entwurf) n++; }
+        for (const r of d.regeln) { const da = mo.regeln.find(x => x.id === r.id); if (!da) mo.regeln.push(clone(r)); else { for (const x of r.produkte || []) if (!(da.produkte || []).includes(x) && (da.produkte || []).length) da.produkte.push(x); } }
+      }
+      e.wiederhergestellt = Date.now(); const doc = S.protokoll.find(p => p.eintraege.includes(e)); if (doc) await this._set("protokoll/" + doc.monat, clone(doc)).catch(() => {});
+      clearTimeout(this._entwurfTimer); await this._entwurfSichern();
+      if (S.live && S.live !== S.entwurf) await this._set("modell/live", clone(S.live)).catch(() => {});
+      await this.log("Gelöscht", `Zurückgeholt: ${e.text}`);
+      this._melde("live"); this._melde("entwurf");
+      return n || d.produkte.length;
     },
     async alteVersionLaden(v) {
       // Nur der aktuelle Live-Stand ist komplett gespeichert; ältere Releases sind Protokolleinträge.
@@ -4259,12 +4331,12 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
       clearTimeout(this._merkTimer);
       this._merkTimer = setTimeout(() => { const l = Object.values(this._merk); this._merk = {}; this.log(l.map(x => x.bereich), l.map(x => x.text)); }, 4000);
     },
-    async log(bereich, text) {
+    async log(bereich, text, daten) {
       const bs = [].concat(bereich), ts = [].concat(text);
       const monat = new Date().toISOString().slice(0, 7), S = this.S;
       let doc = S.protokoll.find(p => p.monat === monat);
       if (!doc) { doc = { monat, eintraege: [] }; S.protokoll.unshift(doc); }
-      ts.forEach((t, i) => doc.eintraege.push({ ts: Date.now(), von: this.uid, bereich: bs[i] || bs[0], text: t }));
+      ts.forEach((t, i) => doc.eintraege.push(Object.assign({ ts: Date.now() + i, von: this.uid, bereich: bs[i] || bs[0], text: t }, daten && i === 0 ? { daten: clone(daten) } : {})));
       if (doc.eintraege.length > 800) doc.eintraege = doc.eintraege.slice(-800);
       this._melde("protokoll");
       await this._set("protokoll/" + monat, clone(doc)).catch(() => {});
@@ -4589,7 +4661,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     if (!T()) {
       platz.innerHTML = `<div class="v3d-leer">3D-Ansicht wird geladen …</div>`;
       K.lib("three").then(() => { if (platz.isConnected) { platz.innerHTML = ""; K.viewerEinhaengen(platz, mo, prod, sel); } })
-        .catch(() => { if (platz.isConnected) platz.innerHTML = `<div class="v3d-leer">Die 3D-Bibliothek ist nicht erreichbar. Konfiguration und Preise funktionieren trotzdem.</div>`; });
+        .catch(() => { if (!platz.isConnected) return; platz.innerHTML = `<div class="v3d-leer v3d-ersatz">${K.silhouette ? K.silhouette(prod?.visual?.typ, "var(--muted)") : ""}<span class="klein">Keine 3D-Ansicht verfügbar</span></div>`; platz.closest(".ansicht")?.classList.add("ohne3d"); });
       return null;
     }
     const v = K.viewer(); platz.appendChild(v.el); v.groesse(); v.zeige(mo, prod, sel); return v;
@@ -4739,7 +4811,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
      Übersicht
      ===================================================================== */
   K.route("start", () => {
-    const A = S().angebote, offen = A.filter(a => a.status === "entwurf" || a.status === "versendet");
+    const A = K.angeboteSichtbar(), offen = A.filter(a => a.status === "entwurf" || a.status === "versendet");
     const sum = a => E.summen(a, S().einst.mwst).netto;
     const woche = A.reduce((n, a) => n + K.aufrufe(a).filter(e => Date.now() - e.ts < 7 * 864e5).length, 0);
     const entsch = A.filter(a => a.status === "angenommen" || a.status === "abgelehnt");
@@ -4798,7 +4870,13 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
   const nachfahren = (mo, gid) => { const out = [gid]; for (const k of kinder(mo, gid)) out.push(...nachfahren(mo, k.id)); return out; };
   const pfad = (mo, gid) => { const out = []; let g = mo.gruppen.find(x => x.id === gid); while (g) { out.unshift(g); g = mo.gruppen.find(x => x.id === g.eltern); } return out; };
   K.bildUrl = id => id ? "/_blob/" + id : null;
-  const produktBild = (p, farbe) => p.bild ? `<img src="${K.bildUrl(p.bild)}" alt="" loading="lazy">` : K.silhouette(p.visual?.typ, farbe || "var(--ink)");
+  /** Bild aus dem Artikelstamm (Spalte BILD/DOCUMENTS der Artikel-Abfrage) */
+  K.artikelBild = code => (code && K.Store.artikelZu(code)?.bild) || "";
+  /** Bild mit Ersatz: lädt das Bild nicht, erscheint die Grafik */
+  K.bildMitErsatz = (url, ersatz) => `<img src="${esc(url)}" alt="" loading="lazy" data-ersatz="${esc(ersatz)}">`;
+  K.produktBildHtml = (p, farbe) => { const ers = K.silhouette(p.visual?.typ, farbe || "var(--ink)"); if (p.bild) return `<img src="${K.bildUrl(p.bild)}" alt="" loading="lazy">`; const a = K.artikelBild(p.code); return a ? K.bildMitErsatz(a, ers) : ers; };
+  const produktBild = (p, farbe) => K.produktBildHtml(p, farbe);
+  document.addEventListener("error", e => { const t = e.target; if (t && t.tagName === "IMG" && t.dataset && t.dataset.ersatz != null && t.parentNode) { const d = document.createElement("span"); d.className = "bild-ersatz"; d.title = "Bild nicht geladen: " + t.src; d.innerHTML = t.dataset.ersatz; console.info("[Konfigurator] Bild nicht geladen:", t.src); t.replaceWith(d); } }, true);
   function gruppenBild(mo, g) {
     if (g.bild) return `<img src="${K.bildUrl(g.bild)}" alt="">`;
     const p = mo.produkte.find(x => nachfahren(mo, g.id).includes(x.gruppe));
@@ -4814,11 +4892,11 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
         <div class="kachel-titel"><b>${esc(p.name)}</b><span class="info" title="${esc(p.beschreibung)}" tabindex="0" aria-label="${esc(p.beschreibung)}">i</span>
           <button type="button" class="stern" data-act="favorit" data-p="${p.id}" aria-pressed="${fav}" title="${fav ? "Aus Favoriten entfernen" : "Zu Favoriten"}">${fav ? "★" : "☆"}</button></div>
         <span class="mono klein gedimmt">${esc(p.code || p.artnr || "")}</span>
-        <div class="kachel-fuss"><span class="num">ab ${K.eur(mo ? abPreis(mo, p) : p.basispreis)}</span><button type="button" class="zahnrad" data-act="konfigStart" data-p="${p.id}" title="Konfigurieren" aria-label="Konfigurieren">⚙</button></div>
+        <div class="kachel-fuss"><span class="num">ab ${K.eur(mo ? abPreis(mo, p) : p.basispreis)}</span><span class="row kachel-knoepfe">${K.Store.schreiben && !K.kat.entwurf ? `<button type="button" class="zahnrad" data-act="kbBearbeiten" data-p="${p.id}" title="Im Katalog aufbauen bearbeiten" aria-label="${esc(p.name)} bearbeiten">✎</button><button type="button" class="zahnrad loeschen" data-act="katLoeschen" data-p="${p.id}" title="Löschen" aria-label="${esc(p.name)} löschen">🗑</button>` : ""}<button type="button" class="zahnrad" data-act="konfigStart" data-p="${p.id}" title="Konfigurieren" aria-label="Konfigurieren">⚙</button></span></div>
       </div></article>`;
   }
   function baum(mo, gid, tiefe) {
-    const zahl = id => mo.produkte.filter(p => p.aktiv !== false && nachfahren(mo, id).includes(p.gruppe)).length;
+    const zahl = id => mo.produkte.filter(p => p.aktiv !== false && K.produktSichtbar(mo, p) && nachfahren(mo, id).includes(p.gruppe)).length;
     return kinder(mo, gid).filter(g => zahl(g.id) > 0).map(g => {
       const hatKinder = kinder(mo, g.id).some(k => zahl(k.id) > 0), offen = K.kat.offen[g.id] ?? true, aktiv = K.kat.gruppe === g.id;
       const anzahl = zahl(g.id);
@@ -4832,7 +4910,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     const mo = K.kat.entwurf ? S().entwurf : live(); if (!mo) return keinModell();
     const k = K.kat, q = k.suche.toLowerCase(), fav = S().prefs.favoriten || [];
     const imBaum = k.gruppe === "fav" ? null : k.gruppe ? nachfahren(mo, k.gruppe) : null;
-    let prods = mo.produkte.filter(p => p.aktiv !== false)
+    let prods = mo.produkte.filter(p => p.aktiv !== false && K.produktSichtbar(mo, p))
       .filter(p => k.gruppe === "fav" ? fav.includes(p.id) : !imBaum || imBaum.includes(p.gruppe))
       .filter(p => !q || (p.name + " " + p.beschreibung + " " + (p.artnr || "") + " " + (p.code || "")).toLowerCase().includes(q));
     // Katalogfilter aus Merkmalen mit "katalogfilter" (z. B. Anzahl Achsen)
@@ -4844,11 +4922,13 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     for (const [mid, wid] of Object.entries(k.filter)) if (wid) prods = prods.filter(p => E.produktMerkmale(mo, p).some(x => x.m.id === mid && x.werte.some(v => v.id === wid)));
     const ziel = K.konf.ziel;
     const krumen = k.gruppe === "fav" ? ["Favoriten"] : ["Katalog", ...(k.gruppe ? pfad(mo, k.gruppe).map(g => g.name) : [])];
-    return `${K.kat.entwurf ? `<div class="hinweis warn" style="margin-bottom:12px"><b>Vorschau des Entwurfs.</b> So sieht der Katalog nach der Freigabe aus. <button class="btn klein" type="button" data-act="katZumBau">Zurück zum Aufbau</button> <a class="btn klein primary" href="#studio-freigabe">Freigeben</a></div>` : ""}${ziel ? `<div class="hinweis" style="margin-bottom:12px">Das konfigurierte Fahrzeug wird als neue Position in <b>${esc(ziel.nr)}</b> übernommen. <button class="btn klein" type="button" data-act="zielAbbrechen">Abbrechen</button></div>` : ""}
+    const offen = !K.kat.entwurf && K.freigabeOffen ? K.freigabeOffen() : 0;
+    const offenHinweis = offen ? `<div class="hinweis" style="margin-bottom:12px"><b>Der Katalog zeigt die freigegebene Version${live()?.version ? " " + live().version : ""}.</b> Im Studio gibt es ${offen === 1 ? "1 Änderung" : offen + " Änderungen"}, die noch nicht freigegeben ${offen === 1 ? "ist" : "sind"}. Erst nach der Freigabe sieht der Vertrieb den Stand aus „Katalog aufbauen“.${K.Store.schreiben ? ` <button class="btn klein" type="button" data-act="katEntwurfZeigen">Entwurf ansehen</button> <a class="btn klein primary" href="#studio-freigabe" data-act="katZurFreigabe">Zur Freigabe</a>` : ""}</div>` : "";
+    return `${offenHinweis}${K.kat.entwurf ? `<div class="hinweis warn" style="margin-bottom:12px"><b>Vorschau des Entwurfs.</b> So sieht der Katalog nach der Freigabe aus. <button class="btn klein" type="button" data-act="katZumBau">Zurück zum Aufbau</button> <a class="btn klein primary" href="#studio-freigabe">Freigeben</a></div>` : ""}${ziel ? `<div class="hinweis" style="margin-bottom:12px">Das konfigurierte Fahrzeug wird als neue Position in <b>${esc(ziel.nr)}</b> übernommen. <button class="btn klein" type="button" data-act="zielAbbrechen">Abbrechen</button></div>` : ""}
     <div class="katalog">
       <nav class="baum panel" aria-label="Produktgruppen">
         <input type="search" id="kat-suche" data-in="katSuche" placeholder="Suche im Katalog" value="${esc(k.suche)}">
-        <ul><li><div class="baum-zeile${!k.gruppe ? " aktiv" : ""}" style="--tiefe:0"><span class="baum-auf"></span><button type="button" class="baum-name" data-act="katGruppe" data-g="">Gesamter Katalog<span class="gedimmt klein">${mo.produkte.filter(p => p.aktiv !== false).length}</span></button></div>
+        <ul><li><div class="baum-zeile${!k.gruppe ? " aktiv" : ""}" style="--tiefe:0"><span class="baum-auf"></span><button type="button" class="baum-name" data-act="katGruppe" data-g="">Gesamter Katalog<span class="gedimmt klein">${mo.produkte.filter(p => p.aktiv !== false && K.produktSichtbar(mo, p)).length}</span></button></div>
           <ul>${baum(mo, "", 1)}</ul></li>
           <li><div class="baum-zeile${k.gruppe === "fav" ? " aktiv" : ""}" style="--tiefe:0"><span class="baum-auf"></span><button type="button" class="baum-name" data-act="katGruppe" data-g="fav">★ Favoriten<span class="gedimmt klein">${fav.length}</span></button></div></li></ul>
       </nav>
@@ -4858,6 +4938,18 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
         ${prods.length ? `<div class="kacheln">${prods.map(p => produktKarte(p, mo)).join("")}</div>` : `<div class="leer">In dieser Auswahl gibt es keine Fahrzeuge.</div>`}
       </section></div>`;
   });
+  /** Fahrzeug im Studio › Katalog aufbauen öffnen (ändern, Codes, löschen) */
+  K.act.kbBearbeiten = el => { const pid = el.dataset.p, mo = S().entwurf; if (!mo) return;
+    if (!mo.produkte.some(x => x.id === pid)) { const lp = S().live?.produkte.find(x => x.id === pid);
+      return K.sheet(`<h3>${esc(lp?.name || "Fahrzeug")} löschen?</h3><p>Dieses Fahrzeug ist im Katalog aufbauen schon entfernt und steht nur noch hier im Katalog.</p>
+        <div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-act="sheetZu">Abbrechen</button><button class="btn gefahr" type="button" data-act="kbRestLoeschen" data-p="${esc(pid)}">Auch aus dem Katalog löschen</button></div><p class="klein gedimmt">Zurückholen danach über Studio › Protokoll.</p>`); }
+    K.kat.entwurf = false; K.konf.entwurf = false; K.kb.sel = "p:" + pid; K.kb.pos = null; K.kb.loeschen = null; K.gehe("studio-katalog"); };
+  /** Fahrzeug direkt aus dem Katalog löschen (Entwurf und Katalog, Kopie im Protokoll) */
+  K.act.katLoeschen = el => { const p = (S().live?.produkte || []).find(x => x.id === el.dataset.p) || E.produkt(S().entwurf, el.dataset.p); if (!p) return;
+    K.sheet(`<h3>${esc(p.name)} löschen?</h3><p>Das Fahrzeug wird aus dem Katalog und aus Katalog aufbauen entfernt. Bestehende Angebote behalten ihre Positionen.</p><div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-act="sheetZu">Abbrechen</button><button class="btn gefahr" type="button" data-act="kbRestLoeschen" data-p="${esc(p.id)}">Löschen</button></div><p class="klein gedimmt">Zurückholen über Studio › Protokoll.</p>`); };
+  K.act.konfAnsicht = () => { K.konf.zeige3d = !K.konf.zeige3d; K.render(); };
+  K.act.katEntwurfZeigen = () => { K.kat.entwurf = true; K.render(); };
+  K.act.katZurFreigabe = () => { K.sheetZu && K.sheetZu(); K.gehe("studio-freigabe"); };
   K.act.katZumBau = () => { K.kat.entwurf = false; K.gehe("studio-katalog"); };
   K.act.katGruppe = el => { K.kat.gruppe = el.dataset.g; K.render(); };
   K.act.katAuf = el => { K.kat.offen[el.dataset.g] = !(K.kat.offen[el.dataset.g] ?? true); K.render(); };
@@ -4871,6 +4963,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
   /* Vorschaubild eines Werts: hochgeladenes Bild, Farbfeld oder schematische Grafik */
   K.wertGrafik = (m, w, i, p) => {
     if (w.bild) return `<img src="${K.bildUrl(w.bild)}" alt="" loading="lazy">`;
+    const ab = !w.hex && K.artikelBild(w.code); if (ab) return K.bildMitErsatz(ab, K.wertGrafik(m, Object.assign({}, w, { code: "" }), i, p));
     if (w.hex) return `<span class="farbkachel" style="background:${esc(w.hex)}"></span>`;
     const farben = ["#2E9E5B", "#1F3F9A", "#B23AC4", "#C8312B", "#2BB3A5", "#8A5A2B", "#D98C00", "#56606B"];
     const f = farben[i % farben.length], typ = p?.visual?.typ || "semi";
@@ -4893,6 +4986,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
   };
   K.konfigOeffnen = (pid, sel, ziel, entwurf) => {
     const mo = entwurf ? S().entwurf : live(), p = E.produkt(mo, pid); if (!p) { K.toast("Dieses Fahrzeug gibt es im Modell nicht mehr."); return; }
+    if (!entwurf && !K.produktSichtbar(mo, p)) { K.toast("Dieses Fahrzeug ist für Sie nicht freigegeben."); return; }
     const s = K.clone(sel || {}); const notes = E.bereinige(mo, p, s);
     Object.assign(K.konf, { produkt: pid, sel: s, notes, ziel, tab: "Grundmaschine", entwurf: !!entwurf });
     K.gehe("konfig");
@@ -4959,7 +5053,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     const ga = p.grundausstattung || [];
     const gaHtml = !ga.length ? "" : `<details class="ga-block" ${k.gaOffen ? "open" : ""}><summary data-act="konfGa"><b>Grundausstattung</b><span class="gedimmt klein">${ga.length} Positionen inklusive</span></summary>
       ${[...new Set(ga.map(x => x.gruppe || ""))].map(gr => `${gr ? `<div class="eyebrow">${esc(gr)}</div>` : ""}<ul>${ga.filter(x => (x.gruppe || "") === gr).map(x => `<li><code>${esc(x.code)}</code> ${esc(x.name)}</li>`).join("")}</ul>`).join("")}</details>`;
-    if (!bereiche.length && !["kalkulation", "stueckliste"].includes(k.tab)) links = gaHtml || `<div class="leer">Für dieses Fahrzeug gibt es keine Auswahl.</div>`;
+    if (!bereiche.length && !["kalkulation", "stueckliste"].includes(k.tab)) links = gaHtml || `<div class="leer konf-leer"><b>Für dieses Fahrzeug sind noch keine Codes hinterlegt.</b><br>Es wird mit dem Grundpreis${p.basispreis ? ` von ${K.eur(p.basispreis)}` : ""} angeboten.${K.Store.schreiben ? `<br><br><button class="btn primary" type="button" data-act="kbBearbeiten" data-p="${p.id}">Codes im Katalog aufbauen hinzufügen</button>` : ""}</div>`;
     else if (bereiche.includes(k.tab)) {
       const imBereich = pm.filter(x => E.bereich(x.m) === k.tab), abschnitte = [...new Set(imBereich.map(x => x.m.abschnitt || ""))];
       links = (k.tab === bereiche[0] ? gaHtml : "") + abschnitte.map(ab => `<section class="abschnittblock">${ab && ab !== k.tab ? `<h2>${esc(ab)}</h2>` : ""}${imBereich.filter(x => (x.m.abschnitt || "") === ab).map(x => merkmalHtml(mo, p, x.m, x.werte, g, gs, k.sel)).join("")}</section>`).join("");
@@ -4975,16 +5069,16 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
         <tr class="summe"><td colspan="3">Summe je Fahrzeug</td><td class="r num">${K.eur(preis.einzel)}</td><td class="r num">${K.eur(preis.kosten)}</td><td class="r num">${K.eur(db)}</td></tr></tbody></table></div>
         <p class="klein gedimmt" style="margin-top:8px">Marge ${K.zahl(marge, 1)} %. Kalkulationswerte sind intern und erscheinen nicht im Angebot.</p>`;
     }
-    const ziel = k.ziel;
+    const ziel = k.ziel, foto = p.bild ? K.bildUrl(p.bild) : K.artikelBild(p.code);
     K.nach(v => { const pl = v.querySelector("[data-viewer]"); if (pl) K.viewerEinhaengen(pl, mo, p, k.sel); });
     const zahl = b => offenAlle.filter(m => E.bereich(m) === b).length;
     const uebernehmenText = k.entwurf ? "" : ziel && ziel.idx != null ? `Position ${(ziel.idx + 1) * 10} aktualisieren` : ziel ? `In ${esc(ziel.nr)} übernehmen` : "Übernehmen";
-    return `${k.entwurf ? `<div class="hinweis warn" style="margin-bottom:10px">Sie testen den <b>Entwurf</b> des Modells. Das Ergebnis kann nicht in Angebote übernommen werden. <a href="#studio-regeln">Zurück ins Studio</a></div>` : ""}
+    return `${k.entwurf ? `<div class="hinweis warn" style="margin-bottom:10px">Sie testen den <b>Entwurf</b> des Modells. Das Ergebnis kann nicht in Angebote übernommen werden. <button type="button" class="link" data-act="kbBearbeiten" data-p="${p.id}">Zurück zum Katalog aufbauen</button></div>` : ""}
     <header class="konf-bar">
       <span class="kb-bild">${produktBild(p, "currentColor")}</span>
       <div class="kb-name"><b>${esc(p.name)}</b><span class="mono">${esc(p.code || p.artnr || "")}</span></div>
       <span class="kb-version">${k.entwurf ? "Entwurf" : "Modell v" + mo.version}</span>
-      <div class="kb-preis num">${K.eur2(preis.einzel)}</div>
+      <div class="kb-preis num">${preis.einzel || preis.zeilen.some(z => z.preis) ? K.eur2(preis.einzel) : `<span class="kb-preis-fehlt" title="Weder Grundpreis noch Preise an den Codes hinterlegt">kein Preis hinterlegt</span>`}</div>
       ${uebernehmenText ? `<button class="btn gelb" type="button" data-act="konfUebernehmen">✓ ${uebernehmenText}</button>` : ""}
       ${ziel && ziel.idx != null ? `<button class="btn kb-btn" type="button" data-act="konfZielLoesen">Als neue Position</button>` : ""}
       <button class="btn kb-btn" type="button" data-act="konfSchliessen">✕ Schließen</button>
@@ -4998,12 +5092,12 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
         <div class="abschnitte">${links}</div>
       </div>
       <aside class="side">
-        <div class="panel ansicht"><div data-viewer class="viewerplatz"></div>
-          <div class="row zwischen" style="padding:0 4px"><span class="gedimmt klein">${offenAlle.length ? `⚠ ${offenAlle.length} Pflichtangaben offen` : "Konfiguration vollständig"}</span>
-            <span class="row"><button class="btn klein" type="button" data-act="export3d" data-f="png">Bild speichern</button><button class="btn klein" type="button" data-act="export3d" data-f="glb">3D-Szene exportieren</button></span></div></div>
+        <div class="panel ansicht${foto && !k.zeige3d ? " mit-foto" : ""}">${foto && !k.zeige3d ? `<div class="viewerplatz fotoplatz">${K.bildMitErsatz(foto, `<div class="v3d-leer">${K.silhouette(p.visual?.typ, "var(--muted)")}</div>`)}</div>` : `<div data-viewer class="viewerplatz"></div>`}
+          <div class="row zwischen" style="padding:0 4px"><span class="gedimmt klein">${offenAlle.length ? `⚠ ${offenAlle.length} Pflichtangaben offen` : bereiche.length ? "Konfiguration vollständig" : ""}</span>
+            <span class="row">${foto ? `<button class="btn klein" type="button" data-act="konfAnsicht">${k.zeige3d ? "Foto" : "3D-Ansicht"}</button>` : ""}<span class="nur3d row"><button class="btn klein" type="button" data-act="export3d" data-f="png">Bild speichern</button><button class="btn klein" type="button" data-act="export3d" data-f="glb">3D-Szene exportieren</button></span></span></div></div>
         <details class="panel regeln"><summary>Aktive Regeln (${regeln.length})</summary>
           <ul class="regelliste">${regeln.map(r => `<li><span class="mono">${r.id}</span><span>${esc(r.hinweis || E.satz(mo, r))}</span></li>`).join("") || "<li><span></span><span>Keine Einschränkungen aktiv.</span></li>"}</ul></details>
-        <div class="row"><button class="btn klein" type="button" data-act="konfReset">Auswahl zurücksetzen</button><select id="konf-produkt" data-act="konfProdukt" aria-label="Grundfahrzeug wechseln">${mo.produkte.filter(x => x.aktiv !== false).map(x => `<option value="${x.id}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div>
+        <div class="row"><button class="btn klein" type="button" data-act="konfReset">Auswahl zurücksetzen</button><select id="konf-produkt" data-act="konfProdukt" aria-label="Grundfahrzeug wechseln">${mo.produkte.filter(x => x.aktiv !== false && K.produktSichtbar(mo, x)).map(x => `<option value="${x.id}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div>
       </aside></div>`;
   });
   K.act.konfTab = el => { K.konf.tab = el.dataset.t; K.render(); };
@@ -5050,7 +5144,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
       else a.positionen.push(neu);
       K.Store.angebotSpeichern(a); const nr = a.nr; k.ziel = null; K.toast("Position übernommen"); K.gehe("angebot-" + nr); return;
     }
-    const offen = S().angebote.filter(a => a.status === "entwurf").sort((x, y) => y.erstellt - x.erstellt);
+    const offen = K.angeboteSichtbar().filter(a => a.status === "entwurf").sort((x, y) => y.erstellt - x.erstellt);
     K.sheet(`<h3>In Angebot übernehmen</h3>
       <div class="feld"><label for="ua-kunde">Neues Angebot für</label><select id="ua-kunde">${kundenOptionen()}</select></div>
       <div class="row"><button class="btn primary" type="button" data-act="uebernehmenNeu">Neues Angebot anlegen</button></div>
@@ -5071,7 +5165,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     const nr = num.nr; if (num.quelle === "ersatz") K.toast("APplus hat keine Nummer geliefert, vorläufige Nummer " + nr + " vergeben.");
     const ich = K.Store.meinVertrieb || e.vertrieb[0]?.id;
     const a = { nr, kundeId: kid, kunde: k ? { firma: k.firma, person: k.person, strasse: k.strasse, ort: k.ort, mail: k.mail } : { firma: "", person: "", strasse: "", ort: "" },
-      bearbeiter: ich, erstellt: Date.now(), gueltig: Date.now() + e.gueltigTage * 864e5, status: "entwurf", positionen: [], rabatt: 0,
+      bearbeiter: ich, erstelltVon: K.Rechte?.benutzer?.login || K.Rechte?.benutzer?.personal || "", erstellt: Date.now(), gueltig: Date.now() + e.gueltigTage * 864e5, status: "entwurf", positionen: [], rabatt: 0,
       texte: { einleitung: e.vorlage.einleitung, lieferung: e.vorlage.lieferung, zahlung: e.vorlage.zahlung, gewaehrleistung: e.vorlage.gewaehrleistung, schluss: e.vorlage.schluss },
       token: null, freigegeben: false, events: [], nrQuelle: num.quelle, kundeNr: k?.nr || "" };
     { const b = (e.vertrieb || []).find(v => v.id === ich); if (b) a.bearbeiterInfo = { name: b.name, tel: b.tel, mail: b.mail, nr: b.nr || "" }; }
@@ -5088,13 +5182,13 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
   K.ang = { status: "alle", suche: "" };
   K.route("angebote", () => {
     const f = K.ang, q = f.suche.toLowerCase();
-    const liste = [...S().angebote].sort((a, b) => b.erstellt - a.erstellt)
+    const liste = [...K.angeboteSichtbar()].sort((a, b) => b.erstellt - a.erstellt)
       .filter(a => f.status === "alle" || (f.status === "heiss" ? K.heiss(a) : a.status === f.status))
       .filter(a => !q || (a.nr + " " + a.kunde.firma + " " + a.positionen.map(p => p.produktName || p.text).join(" ")).toLowerCase().includes(q));
-    const zahl = s => S().angebote.filter(a => s === "heiss" ? K.heiss(a) : a.status === s).length;
+    const zahl = s => K.angeboteSichtbar().filter(a => s === "heiss" ? K.heiss(a) : a.status === s).length;
     return kopf("Vertrieb", "Angebote", "", `<button class="btn primary" type="button" data-act="angebotNeu">Neues Angebot</button>`) + `
       <div class="filterleiste"><div class="segment" role="group" aria-label="Status">
-        ${[["alle", "Alle", S().angebote.length], ["heiss", "Heiß", zahl("heiss")], ...Object.entries(STATUS).map(([k, v]) => [k, v, zahl(k)])].map(([id, n, c]) => `<button type="button" data-act="angStatus" data-s="${id}" aria-pressed="${f.status === id}">${n} <span class="zaehler">${c}</span></button>`).join("")}
+        ${[["alle", "Alle", K.angeboteSichtbar().length], ["heiss", "Heiß", zahl("heiss")], ...Object.entries(STATUS).map(([k, v]) => [k, v, zahl(k)])].map(([id, n, c]) => `<button type="button" data-act="angStatus" data-s="${id}" aria-pressed="${f.status === id}">${n} <span class="zaehler">${c}</span></button>`).join("")}
       </div><input type="search" id="ang-suche" data-in="angSuche" placeholder="Nummer, Kunde oder Fahrzeug" value="${esc(f.suche)}"></div>
       ${angebotsTabelle(liste)}`;
   });
@@ -5241,7 +5335,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     return kopf("Vertrieb", "Kunden", "", `<a class="btn primary" href="#kunde-neu">Neuer Kunde</a>`) + `
       <div class="filterleiste"><input type="search" id="kd-suche" data-in="kdSuche" placeholder="Firma, Ort, Ansprechpartner oder Kundennummer" value="${esc(K.kd.suche)}"></div>
       ${liste.length ? `<div class="tabwrap"><table class="klickbar"><thead><tr><th>Nr.</th><th>Firma</th><th>Ansprechpartner</th><th>Ort</th><th class="r">Angebote</th><th class="r">Volumen netto</th></tr></thead><tbody>
-      ${liste.map(k => { const as = S().angebote.filter(a => a.kundeId === k.id); return `<tr data-act="oeffne" data-ziel="kunde-${k.id}" tabindex="0"><td class="mono">${esc(k.nr)}</td><td><b>${esc(k.firma)}</b></td><td>${esc(k.person)}</td><td class="gedimmt">${esc(k.ort)}</td><td class="r num">${as.length}</td><td class="r num">${K.eur(as.reduce((n, a) => n + E.summen(a, S().einst.mwst).netto, 0))}</td></tr>`; }).join("")}
+      ${liste.map(k => { const as = K.angeboteSichtbar().filter(a => a.kundeId === k.id); return `<tr data-act="oeffne" data-ziel="kunde-${k.id}" tabindex="0"><td class="mono">${esc(k.nr)}</td><td><b>${esc(k.firma)}</b></td><td>${esc(k.person)}</td><td class="gedimmt">${esc(k.ort)}</td><td class="r num">${as.length}</td><td class="r num">${K.eur(as.reduce((n, a) => n + E.summen(a, S().einst.mwst).netto, 0))}</td></tr>`; }).join("")}
       </tbody></table></div>` : `<div class="leer">Keine Kunden gefunden.</div>`}`;
   });
   K.inp.kdSuche = el => { K.kd.suche = el.value; K.render(); };
@@ -5250,7 +5344,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     const neu = id === "neu";
     let k = neu ? (K.kdEntwurf ||= { id: K.id("k"), nr: String(10000 + Math.floor(Math.random() * 9000)), firma: "", person: "", strasse: "", ort: "", land: "DE", mail: "", tel: "", notiz: "" }) : S().kunden.find(x => x.id === id);
     if (!k) return `<div class="leer">Kunde nicht gefunden.</div>`;
-    const as = S().angebote.filter(a => a.kundeId === k.id).sort((a, b) => b.erstellt - a.erstellt);
+    const as = K.angeboteSichtbar().filter(a => a.kundeId === k.id).sort((a, b) => b.erstellt - a.erstellt);
     const f = (key, l, typ = "text", breit) => `<div class="feld${breit ? " breit" : ""}"><label for="kd-${key}">${l}</label><input id="kd-${key}" type="${typ}" data-in="kdFeld" data-k="${key}" data-id="${neu ? "neu" : k.id}" value="${esc(k[key])}" ${K.Store.schreiben ? "" : "disabled"}></div>`;
     return kopf("Kunde", neu ? "Neuer Kunde" : esc(k.firma), "", neu ? `<button class="btn primary" type="button" data-act="kdAnlegen">Kunde anlegen</button>` : `<button class="btn" type="button" data-act="kdAngebot" data-id="${k.id}">Neues Angebot</button><button class="btn gefahr-text" type="button" data-act="kdLoeschen" data-id="${k.id}">Löschen</button>`) + `
       <section class="panel"><div class="formgitter">${f("firma", "Firma", "text", true)}${f("nr", "Kundennummer")}${f("person", "Ansprechpartner")}${f("strasse", "Straße")}${f("ort", "PLZ und Ort")}${f("mail", "E-Mail", "email")}${f("tel", "Telefon", "tel")}
@@ -5488,8 +5582,8 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     K.st.produkt = id; geaendert(`Produkt ${id} angelegt`);
   };
   K.act.pKopie = () => { const mo = ent(), p = K.clone(prod()); p.id = E.neueId("P", mo.produkte.map(x => x.id)); p.name += " (Kopie)"; p.aktiv = false; mo.produkte.push(p); K.st.produkt = p.id; geaendert(`Produkt ${p.name} angelegt`); };
-  K.act.pLoeschen = () => K.sheet(`<h3>${esc(prod().name)} löschen?</h3><p>Der Artikel wird aus dem Konfigurationsmodell entfernt (nicht aus APplus). Er verschwindet nach der nächsten Freigabe aus dem Katalog; bestehende Angebote behalten ihre Positionen. Regeln, die nur für diesen Artikel galten, werden mit gelöscht.</p><div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-act="sheetZu">Abbrechen</button><button class="btn gefahr" type="button" data-act="pLoeschenOk">Löschen</button></div>`);
-  K.act.pLoeschenOk = () => { const p = prod(), mo = ent(); mo.produkte = mo.produkte.filter(x => x.id !== p.id); const n = E.ausGeltungEntfernen(mo, [], [p.id]); K.sheetZu(); K.st.produkt = null; if (K.st.knoten === "p:" + p.id) K.st.knoten = p.gruppe ? "g:" + p.gruppe : ""; geaendert(`Artikel ${p.code || p.name} gelöscht${n ? `, ${n} Regeln nur für diesen Artikel entfernt` : ""}`); };
+  K.act.pLoeschen = () => K.sheet(`<h3>${esc(prod().name)} löschen?</h3><p>Das Fahrzeug wird aus dem Konfigurator und dem Katalog entfernt (nicht aus APplus). Bestehende Angebote behalten ihre Positionen. Regeln, die nur dafür galten, werden mit gelöscht. Zurückholen über Studio › Protokoll.</p><div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-act="sheetZu">Abbrechen</button><button class="btn gefahr" type="button" data-act="pLoeschenOk">Löschen</button></div>`);
+  K.act.pLoeschenOk = async () => { const p = prod(); K.sheetZu(); await K.Store.endgueltigLoeschen({ produkte: [p.id] }, `Fahrzeug ${p.name} (${p.code || p.id}) gelöscht`); K.st.produkt = ent().produkte[0]?.id || null; K.toast(`${p.name} gelöscht. Zurückholen über Studio › Protokoll.`); K.render(); };
   K.act.stTesten = el => K.konfigOeffnen(el.dataset.p, null, null, true);
   K.act.glbHochladen = async el => {
     const f = el.files[0]; if (!f) return;
@@ -6220,6 +6314,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     return kopf("Einstellungen", "") + `
       <section class="panel"><h3>Firma</h3><div class="formgitter">${f("firma", "name", "Firmenname")}${f("firma", "strasse", "Straße")}${f("firma", "ort", "PLZ und Ort")}${f("firma", "tel", "Telefon")}${f("firma", "web", "Website")}${f("firma", "ustid", "USt-IdNr.")}</div></section>
       <section class="panel"><h3>Angebote</h3><div class="formgitter">${f("root", "gueltigTage", "Gültigkeit in Tagen", "number")}${f("root", "mwst", "Umsatzsteuer %", "number")}</div></section>
+      ${abfragenPanel(e)}
       ${nummernPanel(e, f)}
       <section class="panel"><div class="panelkopf"><h3>Vertrieb</h3>${ro() ? "" : `<button class="btn klein" type="button" data-act="vtNeu">+ Person</button>`}</div>
         <div class="tabwrap ohne-rand"><table class="kompakt"><thead><tr><th>Name</th><th>Telefon</th><th>E-Mail</th><th></th></tr></thead><tbody>
@@ -6232,6 +6327,50 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
         <p class="klein gedimmt">Für den Betrieb in APplus wird die Datenschicht (store.js) gegen Ihre Queries und Tabellen getauscht. Die Struktur steht in daten/demo.json.</p></section>`;
   });
   /* Angebotsnummern: eigener Nummernkreis oder aus APplus */
+  const ABFRAGEN = [["benutzer", "Angemeldeter Benutzer", "eine Zeile: BENUTZER, PERSONAL, NAME, EMAIL (Vorgabe apx_Benutzer)"], ["rechte", "Rechte", "BENUTZER, ROLLE, FAMILIE, FAHRZEUG (Vorgabe apx_Rechte)"], ["artikel", "Artikelstamm (Codes)", "ARTIKEL, NAME; optional NETTO bzw. VKPREIS, HERSTELLKOSTEN, ME"], ["kunden", "Kunden", "KUNDENNR, FIRMA, STRASSE, PLZ, ORT …"], ["vertrieb", "Vertrieb (Bearbeiter)", "PERSONAL, NAME, TELEFON, EMAIL"]];
+  function abfragenPanel(e) {
+    const qs = K.Store.abfragen(), st = K.Store.abfrageStatus || {}, cfg = (K.cfg && K.cfg.queries) || {};
+    return `<section class="panel"><h3>APplus-Abfragen</h3><p class="klein gedimmt">Name der Abfrage, die dem Dashboard zugeordnet ist (wie in APplus angelegt). Der Eintrag hier gilt für diesen Browser und hat Vorrang vor <code>KONF_CONFIG</code>.</p>
+      <div class="tabwrap ohne-rand"><table class="kompakt abf-tab"><thead><tr><th>Wofür</th><th>Abfrage</th><th>Stand</th><th></th></tr></thead><tbody>
+      ${ABFRAGEN.map(([k, t, sp]) => { const s0 = st[k]; return `<tr><td>${t}<div class="klein gedimmt">${sp}</div></td>
+        <td><input id="abf-${k}" class="mono" data-chg="abfName" data-k="${k}" value="${esc((e.abfragen || {})[k] ?? cfg[k] ?? "")}" placeholder="z. B. apx_Artikeldaten" aria-label="Abfrage für ${t}" ${dis()}></td>
+        <td class="klein" id="abf-st-${k}">${s0 ? s0.fehler ? `<span class="warntext">${esc(s0.fehler)}</span>` : `<span class="ok-text">${K.zahl(s0.zeilen)} Zeilen geladen</span>` : qs[k] ? "noch nicht geladen" : "–"}</td>
+        <td><button class="btn klein" type="button" data-act="abfTest" data-k="${k}" ${qs[k] ? "" : "disabled"}>Testen</button></td></tr>`; }).join("")}</tbody></table></div>
+      <div class="feld abf-basis"><label for="abf-basis">Adresse vor dem Bildpfad</label><input id="abf-basis" class="mono" data-chg="abfBasis" value="${esc(e.bildBasis || "")}" placeholder="${esc(K.Store.bildBasisStandard() || "z. B. /APplusProd/DocLib/")} (Standard)" ${dis()}><span class="klein gedimmt">Wird vor relative Bildpfade aus der Abfrage gesetzt (z. B. <code>AB0/AB030.png</code>). Leer = Dokumentablage von APplus (<code>&lt;App&gt;/DocLib/</code>).</span></div>
+      <div id="abf-test" class="klein" aria-live="polite"></div>${(K.nach(testZeigen), "")}
+      <div class="row"><button class="btn" type="button" data-act="lokalNeu">Daten aus APplus neu laden</button></div></section>`;
+  }
+  K.inp.abfName = async el => { const e = S().einst; e.abfragen = Object.assign({}, e.abfragen || {}, { [el.dataset.k]: el.value.trim() }); await K.Store.einstSpeichern(e, true); K.Store.log("Einstellungen", `Abfrage ${el.dataset.k}: ${el.value.trim() || "–"}`); K.render(); };
+  /** Erstes Bild der Artikel-Abfrage probeweise laden und das Ergebnis zeigen */
+  function bildPruefen(rows) {
+    const ziel = K.el("abf-bild"); if (!ziel) return;
+    const sp = ((K.cfg.artikelSpalten || {}).bild || ["BILD", "DOCUMENTS"]).map(x => x.toUpperCase());
+    let roh = "", spalte = "";
+    for (const r of rows) { for (const [h, v] of Object.entries(r || {})) if (sp.includes(h.toUpperCase()) && String(v || "").trim()) { roh = String(v); spalte = h; break; } if (roh) break; }
+    if (!roh) { ziel.innerHTML = `<span class="gedimmt">Keine Bildspalte mit Inhalt gefunden (erkannt werden ${sp.join(", ")}).</span>`; return; }
+    const url = K.Store.bildAus ? K.Store.bildAus(roh) : roh; let voll = url; try { voll = new URL(url, location.href).href; } catch (e) {}
+    ziel.innerHTML = `Bild aus <code>${esc(spalte)}</code>: <code>${esc(roh)}</code><br>Aufgerufene Adresse: <code>${esc(voll)}</code><br><span id="abf-bild-st">lade …</span>`;
+    const img = new Image(), st = () => K.el("abf-bild-st");
+    img.onload = () => { if (st()) st().innerHTML = `<span class="ok-text">Bild lädt (${img.naturalWidth} × ${img.naturalHeight} px).</span>`; };
+    img.onerror = () => { if (st()) st().innerHTML = `<span class="warntext">Bild lädt nicht.</span> ${/^(\\\\|[a-z]:[\\/])/i.test(roh) ? "Netzwerk- und Laufwerkspfade kann der Browser nicht öffnen. Die Abfrage muss eine Web-Adresse liefern." : "Unter dieser Adresse liefert der Server kein Bild. Bitte die Adresse im Browser aufrufen und prüfen."}`; };
+    img.src = url;
+  }
+  K.inp.abfBasis = async el => { const e = S().einst; e.bildBasis = el.value.trim(); await K.Store.einstSpeichern(e, true); K.Store.log("Einstellungen", `Bildadresse: ${e.bildBasis || "–"}`); K.Store.bilderNeu(); K.render(); };
+  function testZeigen() {
+    const t = K.el("abf-test"), r = K.abfLetzt; if (!t || !r) return;
+    if (r.fehler) { t.innerHTML = `<span class="warntext">${esc(r.name)}: ${esc(r.fehler)}</span>`; return; }
+    const rows = r.rows, kopf = [...new Set(rows.slice(0, 50).flatMap(x => Object.keys(x || {})))];
+    t.innerHTML = `<b>${esc(r.name)}</b>: ${K.zahl(rows.length)} Zeilen · Spalten ${kopf.map(h => `<code>${esc(h)}</code>`).join(", ") || "–"}${rows[0] ? `<br>Beispiel: ${esc(kopf.map(h => rows[0][h]).join(" · "))}` : ""}${r.k === "artikel" && !kopf.some(h => h.toUpperCase() === "ARTIKEL") ? `<br><span class="warntext">Spalte ARTIKEL fehlt.</span>` : ""}<br>Mit „Daten aus APplus neu laden“ übernehmen.<div id="abf-bild"></div>`;
+    if (r.k === "artikel") bildPruefen(rows);
+  }
+  K.act.abfTest = async el => {
+    const k = el.dataset.k, name = K.Store.abfragen()[k], t = K.el("abf-test"); t.textContent = `frage ${name} ab …`;
+    try {
+      const rows = await K.cfg.loadQuery(name, k);
+      if (!Array.isArray(rows)) { K.abfLetzt = { k, name, fehler: location.protocol === "file:" ? "Abfragen lassen sich nur innerhalb von APplus abrufen." : "Die Abfrage hat keine Daten geliefert." }; return testZeigen(); }
+      K.abfLetzt = { k, name, rows }; testZeigen();
+    } catch (err) { K.abfLetzt = { k, name, fehler: err.message || String(err) }; testZeigen(); }
+  };
   function nummernPanel(e, f) {
     const z = Object.assign({ quelle: "app", abfrage: (K.cfg.queries || {}).angebotsnummer || "", feld: "", art: "naechste", ersatz: false }, e.nummern || {}), ap = z.quelle === "applus";
     const inp = (k, t, ph, hint) => `<div class="feld"><label for="nr-${k}">${t}</label><input id="nr-${k}" class="mono" data-chg="nrFeld" data-k="${k}" value="${esc(z[k] || "")}" placeholder="${esc(ph || "")}" ${dis()}>${hint ? `<span class="klein gedimmt">${hint}</span>` : ""}</div>`;
@@ -6276,11 +6415,12 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     return kopf("Protokoll", "Wer hat wann was geändert. Die letzten drei Monate.") + `
       <div class="filterleiste"><div class="segment">${[["", "Alle"], ...bereiche.map(b => [b, b])].map(([id, n]) => `<button type="button" data-act="protBereich" data-b="${esc(id)}" aria-pressed="${K.prot.bereich === id}">${esc(n)}</button>`).join("")}</div></div>
       ${liste.length ? `<div class="tabwrap"><table><thead><tr><th>Zeit</th><th>Bereich</th><th>Änderung</th><th>Von</th></tr></thead><tbody>
-      ${liste.map(x => `<tr><td class="nowrap gedimmt">${K.zeit(x.ts)}</td><td><span class="chip">${esc(x.bereich)}</span></td><td>${esc(x.text)}</td><td class="gedimmt">${x.von ? esc(namen[x.von] || "Jemand") : "System"}</td></tr>`).join("")}</tbody></table></div>` : `<div class="leer">Noch keine Einträge.</div>`}`;
+      ${liste.map(x => `<tr><td class="nowrap gedimmt">${K.zeit(x.ts)}</td><td><span class="chip">${esc(x.bereich)}</span></td><td>${esc(x.text)}${x.daten && x.daten.art === "geloescht" ? (x.wiederhergestellt ? ` <span class="chip">zurückgeholt ${K.zeit(x.wiederhergestellt)}</span>` : ro() ? "" : ` <button type="button" class="btn klein" data-act="protZurueck" data-ts="${x.ts}" title="${esc([x.daten.produkte.length ? x.daten.produkte.length + " Fahrzeuge" : "", x.daten.gruppen.length ? x.daten.gruppen.length + " Familien" : "", x.daten.regeln.length ? x.daten.regeln.length + " Regeln" : ""].filter(Boolean).join(", "))}">Zurückholen</button>`) : ""}</td><td class="gedimmt">${x.von ? esc(namen[x.von] || "Jemand") : "System"}</td></tr>`).join("")}</tbody></table></div>` : `<div class="leer">Noch keine Einträge.</div>`}`;
   });
+  K.act.protZurueck = async el => { el.disabled = true; const n = await K.Store.wiederherstellen(+el.dataset.ts); K.toast(n ? `Zurückgeholt: im Katalog aufbauen und im Katalog wieder vorhanden` : "Nichts zurückzuholen"); K.render(); };
   K.act.protBereich = el => { K.prot.bereich = el.dataset.b; K.render(); };
   K.act.zuModell = el => { K.st.knoten = el.dataset.k; K.st.modellTab = "merkmale"; K.gehe("studio-modell"); };
-  K.studio = { kontext, regelListe, matrixAnsicht, tabellenAnsicht, graph, stlTabelle, chipWahl, geaendert, bildFeld, bildHochladen, artKlasse, artTitel, gruppenOptionen, keinEntwurf, kopf, ro, dis, merkmalOptionen, gleicherScope,
+  K.studio = { kontext, regelKarte, regelListe, matrixAnsicht, tabellenAnsicht, graph, stlTabelle, chipWahl, geaendert, bildFeld, bildHochladen, artKlasse, artTitel, gruppenOptionen, keinEntwurf, kopf, ro, dis, merkmalOptionen, gleicherScope,
     knotenObjekt: (mo, k) => !k ? null : k.startsWith("g:") ? mo.gruppen.find(g => g.id === k.slice(2)) : k.startsWith("p:") ? E.produkt(mo, k.slice(2)) : null };
 })();
 
@@ -6574,7 +6714,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     return `<section class="panel"><div class="formgitter">
       <div class="feld"><label for="p-preis">Grundpreis netto</label><input id="p-preis" type="number" step="100" data-in="pZahl" data-k="basispreis" value="${p.basispreis}" ${dis()}></div>
       <div class="feld"><label for="p-kosten">Herstellkosten</label><input id="p-kosten" type="number" step="100" data-in="pZahl" data-k="basiskosten" value="${p.basiskosten}" ${dis()}></div>
-      ${a ? `<div class="feld"><label>Im Artikelstamm</label><div class="wert">${K.eur(a.preis)}${a.kosten ? ` · Kosten ${K.eur(a.kosten)}` : ""}${(a.preis && a.preis !== p.basispreis) && !ro() ? ` <button class="btn klein" type="button" data-act="mPreisAusArtikel">übernehmen</button>` : ""}</div></div>` : ""}</div></section>
+      ${a ? `<div class="feld"><label>Im Artikelstamm</label><div class="wert">${a.preis != null ? K.eur(a.preis) : "kein Preis in der Abfrage"}${a.kosten ? ` · Kosten ${K.eur(a.kosten)}` : ""}${(a.preis && a.preis !== p.basispreis) && !ro() ? ` <button class="btn klein" type="button" data-act="mPreisAusArtikel">übernehmen</button>` : ""}</div></div>` : ""}</div></section>
       ${(p.grundausstattung || []).length ? `<section class="panel"><div class="panelkopf"><h3>Grundausstattung (inklusive)</h3><span class="klein gedimmt">${p.grundausstattung.length} Positionen · aus dem Excel-Import, im Grundpreis enthalten</span></div>
         <div class="tabwrap ohne-rand"><table class="kompakt"><thead><tr><th>Gruppe</th><th>Code</th><th>Bezeichnung</th><th class="r">Wert</th>${ro() ? "" : "<th></th>"}</tr></thead><tbody>
         ${p.grundausstattung.map((x, i) => `<tr><td class="gedimmt">${esc(x.gruppe || "")}</td><td class="mono">${esc(x.code)}</td><td>${esc(x.name)}</td><td class="r num">${x.preis ? K.eur(x.preis) : "inkl."}</td>${ro() ? "" : `<td><button type="button" class="ikon gefahr" data-act="mGaWeg" data-i="${i}" title="Entfernen">✕</button></td>`}</tr>`).join("")}
@@ -8390,7 +8530,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
 
   /* ---------- Bilder (in APplus ohne Dateiablage: verkleinert im Modell) ---------- */
   const alteBildUrl = K.bildUrl;
-  K.bildUrl = id => id && String(id).startsWith("data:") ? id : alteBildUrl(id);
+  K.bildUrl = id => !id ? null : /^(data:|blob:|https?:|\/\/|\.{0,2}\/)/i.test(String(id)) || /[\/.]/.test(String(id)) ? String(id) : alteBildUrl(id);
   async function bildLesen(el) {
     if (el.dataset.weg) return null;
     if (K.assets) return St().bildHochladen(el);
@@ -8410,12 +8550,28 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     const mo = ent(); if (!mo) return St().keinEntwurf();
     const kb = K.kb; if (kb.sel && !objekt(kb.sel)) kb.sel = "";
     const leer = !mo.gruppen.length && !mo.produkte.length;
-    return `<div class="kopfzeile"><div><div class="eyebrow">Studio · Entwurf</div><h2>Katalog aufbauen</h2><p>Familien anlegen und per Drag &amp; Drop ordnen. Artikel aus dem Artikelstamm rechts auf eine Familie ziehen ergibt ein Fahrzeug, auf ein Fahrzeug ziehen ergibt Vertriebscodes. Mehrere Artikel ankreuzen und zusammen ziehen.</p></div>
+    return `<div class="kopfzeile"><div><div class="eyebrow">Studio · Entwurf</div><h2>Katalog aufbauen</h2><p>Familien anlegen und per Drag &amp; Drop ordnen. Artikel aus dem Artikelstamm rechts auf eine Familie ziehen ergibt ein Fahrzeug, auf ein Fahrzeug ziehen ergibt Vertriebscodes. Rechts Artikel suchen und mit „Übernehmen“ oder per Ziehen einfügen.</p></div>
       <div class="row"><button class="btn" type="button" data-act="kbVorschau">Vorschau im Katalog</button><a class="btn primary" href="#studio-freigabe">Freigeben</a>${ro() ? "" : `<button class="btn klein gefahr-text" type="button" data-act="kbLeeren">${kb.leeren ? "Wirklich alles leeren?" : "Neu beginnen"}</button>`}</div></div>
       ${leer ? `<div class="hinweis">Der Entwurf ist leer. Legen Sie links mit „+ Familie“ die erste Familie an, z. B. „Holztransport“.</div>` : mo.produkte.some(p => /^(ST|TB|TB3|PA|LN)$/.test(p.id)) ? `<div class="hinweis">Hier stehen noch die <b>Beispieldaten</b> (Schwertransport, Holztransport …). Mit „Neu beginnen“ starten Sie mit einem leeren Katalog. Der Vertrieb sieht weiter den alten Stand, bis Sie freigeben.</div>` : ""}
+      ${nurImKatalogHinweis(mo)}
       <div class="kb-layout">${baumAnsicht(mo)}<section class="kb-mitte">${mitte(mo)}</section>${pool(mo)}</div>`;
   });
   function objekt(sel) { if (!sel) return null; const id = sel.slice(2); return sel[0] === "g" ? gruppe(id) : E.produkt(ent(), id); }
+
+  /** Regeln, die bei diesem Fahrzeug gelten und die Position (Gruppe) betreffen */
+  const regelnZu = (mo, p, mid) => mo.regeln.filter(r => E.imGeltungsbereich(mo, r, p) && (r.typ === "tabelle" ? (r.tabelle?.merkmale || []).includes(mid) : (r.wenn || []).some(c => c.merkmal === mid) || r.dann?.merkmal === mid));
+  const typName = m => (E.GRUPPENTYPEN.find(([k]) => k === E.gruppentyp(m)) || [, "Auswahl"])[1];
+  const typKurz = m => ({ kacheln: "Kacheln", liste: "Liste", dropdown: "Dropdown", mehrfach: "mehrere" })[E.gruppentyp(m)] || "Auswahl";
+  const typIkon = m => ({ kacheln: "▦", liste: "☰", dropdown: "▾", mehrfach: "☑" })[E.gruppentyp(m)] || "•";
+  /** Fahrzeuge, die der Vertrieb noch sieht (freigegebene Version), die im Entwurf aber fehlen */
+  const nurLive = mo => { const lv = S().live; if (!lv || lv === mo) return []; const da = new Set(mo.produkte.map(p => p.id)); return (lv.produkte || []).filter(p => !da.has(p.id)); };
+  /* ---------- Fahrzeuge, die nur noch im freigegebenen Katalog stehen ---------- */
+  K.nurImKatalog = () => ent() ? nurLive(ent()) : [];
+  function nurImKatalogHinweis(mo) {
+    const fehlt = K.nurImKatalog(); if (!fehlt.length || ro()) return "";
+    return `<div class="hinweis warn kb-nurkat"><b>${fehlt.length === 1 ? "1 Fahrzeug steht" : fehlt.length + " Fahrzeuge stehen"} noch im Katalog des Vertriebs, aber nicht mehr hier</b> (${fehlt.slice(0, 4).map(p => esc(p.name)).join(", ")}${fehlt.length > 4 ? " …" : ""}). Das stammt aus einem früheren Löschen, das nur hier wirkte.
+      <div class="row" style="margin-top:8px"><button class="btn klein gefahr" type="button" data-act="kbRestLoeschen">Auch aus dem Katalog löschen</button><span class="klein gedimmt">Zurückholen danach über Studio › Protokoll.</span></div></div>`;
+  }
 
   function baumAnsicht(mo) {
     const kb = K.kb;
@@ -8427,13 +8583,19 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
           ${ro() ? "" : `<button type="button" class="kb-plus" data-act="kbFamNeu" data-g="${g.id}" title="Unterfamilie anlegen" aria-label="Unterfamilie anlegen">+</button>`}</div>
         ${offen ? `<ul>${ks.map(k => famZeile(k, t + 1)).join("")}${fs.map(p => artZeile(p, t + 1)).join("")}</ul>` : ""}</li>`;
     };
-    const artZeile = (p, t) => `<li><div class="kb-zeile art${kb.sel === "p:" + p.id ? " aktiv" : ""}${p.aktiv === false ? " inaktiv" : ""}" style="--t:${t}" draggable="${!ro()}" data-drag="p:${p.id}" data-drop="p:${p.id}">
-        <span class="kb-auf"></span><button type="button" class="kb-nm" data-act="kbWahl" data-s="p:${p.id}"><span class="kb-ik">▢</span><span class="kb-artname">${esc(p.name)}<code>${esc(p.code || "")}</code></span></button><span class="kb-zahl" title="Vertriebscodes">${codesVon(p)}</span></div></li>`;
+    const artZeile = (p, t) => {
+      const pm = E.produktMerkmale(mo, p), offen = kb.offen["p:" + p.id] ?? (kb.sel === "p:" + p.id), abs = [...new Set(pm.map(x => x.m.abschnitt || ""))];
+      const posZeile = (x, tt) => { const n = regelnZu(mo, p, x.m.id).length;
+        return `<li><div class="kb-zeile pos${kb.sel === "p:" + p.id && kb.pos === x.m.id ? " aktiv" : ""}" style="--t:${tt}" data-drop="m:${x.m.id}"><span class="kb-auf"></span><button type="button" class="kb-nm" data-act="kbWahl" data-s="p:${p.id}" data-pos="${x.m.id}" title="${esc(x.m.name)}: ${esc(typName(x.m))}"><span class="kb-ik kb-typ" aria-hidden="true">${typIkon(x.m)}</span><span class="kb-artname">${esc(x.m.name)}<code>${esc(x.m.code || "")}${x.m.code ? " · " : ""}${esc(typKurz(x.m))}</code></span></button><span class="kb-zahl" title="Codes${n ? ", " + n + " Regeln" : ""}">${x.werte.length}${n ? `<i class="kb-rz" title="${n} Regeln">§${n}</i>` : ""}</span></div></li>`; };
+      return `<li><div class="kb-zeile art${kb.sel === "p:" + p.id && !kb.pos ? " aktiv" : ""}${p.aktiv === false ? " inaktiv" : ""}" style="--t:${t}" draggable="${!ro()}" data-drag="p:${p.id}" data-drop="p:${p.id}">
+        <button type="button" class="kb-auf" data-act="kbAufP" data-p="${p.id}" aria-label="${offen ? "Positionen zuklappen" : "Positionen aufklappen"}">${pm.length ? (offen ? "▾" : "▸") : ""}</button><button type="button" class="kb-nm" data-act="kbWahl" data-s="p:${p.id}"><span class="kb-ik">▢</span><span class="kb-artname">${esc(p.name)}<code>${esc(p.code || "")}</code></span></button><span class="kb-zahl" title="Vertriebscodes">${codesVon(p)}</span></div>
+        ${offen && pm.length ? `<ul class="kb-posliste">${abs.map(ab => `${ab || abs.length > 1 ? `<li><div class="kb-zeile ueber" style="--t:${t + 1}"><span class="kb-auf"></span><span class="kb-ueber">${esc(ab || "Ohne Überschrift")}</span></div></li>` : ""}${pm.filter(x => (x.m.abschnitt || "") === ab).map(x => posZeile(x, t + (ab || abs.length > 1 ? 2 : 1))).join("")}`).join("")}</ul>` : ""}</li>`;
+    };
     const ohne = mo.produkte.filter(p => !p.gruppe || !gruppe(p.gruppe));
     return `<nav class="panel kb-baum" aria-label="Katalog">
       <div class="kb-baumkopf"><b>Katalog</b>${ro() ? "" : `<button class="btn klein" type="button" data-act="kbFamNeu" data-g="">+ Familie</button>`}</div>
       <ul class="kb-liste" data-drop="g:">${kinder("").map(g => famZeile(g, 0)).join("")}
-        ${ohne.length ? `<li><div class="kb-zeile fam gedimmt" style="--t:0"><span class="kb-auf"></span><span class="kb-nm">Ohne Familie (nicht im Katalog)</span></div><ul>${ohne.map(p => artZeile(p, 1)).join("")}</ul></li>` : ""}</ul>
+        ${ohne.length ? `<li><div class="kb-zeile fam gedimmt" style="--t:0"><span class="kb-auf"></span><span class="kb-nm">Ohne Familie (nicht im Katalog)</span></div><ul>${ohne.map(p => artZeile(p, 1)).join("")}</ul></li>` : ""}
       ${ro() ? "" : `<div class="kb-wurzel" data-drop="g:">Hierher ziehen = oberste Ebene</div>`}</nav>`;
   }
 
@@ -8447,15 +8609,17 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     return `<div class="panel kb-objekt" data-drop="g:${g.id}">
       <div class="eyebrow">${pfad.length ? pfad.map(x => esc(x.name)).join(" › ") + " ›" : "Familie"}</div>
       <div class="kb-kopf"><input id="kb-gname" class="flach titelfeld" data-chg="kbGName" value="${esc(g.name)}" aria-label="Name der Familie" ${St().dis()}>
-        ${ro() ? "" : `<button type="button" class="btn klein gefahr-text" data-act="kbLoeschen">${K.kb.loeschen === "g:" + g.id ? "Wirklich löschen?" : "Löschen"}</button>`}</div>
+        ${ro() ? "" : `<button type="button" class="btn klein gefahr-text" data-act="kbLoeschen">${K.kb.loeschen === "g:" + g.id ? `Familie mit ${fs.length + ks.reduce((n, k) => n + E.familienArtikel(mo, k.id).length, 0)} Fahrzeugen löschen?` : "Löschen"}</button>`}</div>
       <div class="formgitter">
         <div class="feld"><label for="kb-geltern">liegt unter</label><select id="kb-geltern" data-act="kbGEltern" ${St().dis()}><option value="">– oberste Ebene –</option>${mo.gruppen.filter(x => x.id !== g.id && !istUnter(g.id, x.id)).map(x => `<option value="${x.id}" ${x.id === g.eltern ? "selected" : ""}>${esc(E.gruppenPfad(mo, x.id).map(y => y.name).join(" › "))}</option>`).join("")}</select></div>
         <div class="feld"><label>Bild im Katalog</label>${bildFeld(g.bild, "kbBild", `data-s="g:${g.id}"`)}</div></div>
       <div class="feld"><label for="kb-gbes">Beschreibung</label><textarea id="kb-gbes" rows="2" data-chg="kbGBes" ${St().dis()}>${esc(g.beschreibung || "")}</textarea></div>
       <h3>Inhalt</h3>
       ${ks.length || fs.length ? `<div class="kb-kacheln">${ks.map(k => `<button type="button" class="kb-kachel fam" data-act="kbWahl" data-s="g:${k.id}"><span>▤</span><b>${esc(k.name)}</b><small>${E.familienArtikel(mo, k.id).length} Fahrzeuge</small></button>`).join("")}
-        ${fs.map(p => `<button type="button" class="kb-kachel" data-act="kbWahl" data-s="p:${p.id}"><span class="kb-silh">${p.bild ? `<img src="${K.bildUrl(p.bild)}" alt="">` : K.silhouette(p.visual?.typ, "var(--ink)")}</span><b>${esc(p.name)}</b><small><code>${esc(p.code || "")}</code> · ${codesVon(p)} Codes</small></button>`).join("")}</div>` : ""}
-      <div class="kb-ablage">Fahrzeuge aus dem Artikelstamm hierher ziehen<br><span class="gedimmt klein">oder rechts ankreuzen und „Als Fahrzeuge hinzufügen“</span></div>
+        ${fs.map(p => `<div class="kb-kachel-w${K.kb.kachelLoeschen === p.id ? " frage" : ""}"><button type="button" class="kb-kachel" data-act="kbWahl" data-s="p:${p.id}"><span class="kb-silh">${K.produktBildHtml(p, "var(--ink)")}</span><b>${esc(p.name)}</b><small><code>${esc(p.code || "")}</code> · ${codesVon(p)} Codes</small></button>
+          ${ro() ? "" : K.kb.kachelLoeschen === p.id ? `<div class="kb-kachel-frage"><span>${esc(p.name)} löschen?</span><button type="button" class="btn klein gefahr" data-act="kbKachelLoeschenOk" data-p="${p.id}">Löschen</button><button type="button" class="btn klein ghost" data-act="kbKachelLoeschen" data-p="">Abbrechen</button></div>`
+            : `<span class="kb-kachel-akt"><button type="button" class="ikon" data-act="kbWahl" data-s="p:${p.id}" title="Bearbeiten" aria-label="${esc(p.name)} bearbeiten">✎</button><button type="button" class="ikon gefahr" data-act="kbKachelLoeschen" data-p="${p.id}" title="Löschen" aria-label="${esc(p.name)} löschen">🗑</button></span>`}</div>`).join("")}</div>` : ""}
+      <div class="kb-ablage">Fahrzeuge aus dem Artikelstamm hierher ziehen<br><span class="gedimmt klein">oder rechts suchen und „als Fahrzeug“ wählen</span></div>
       ${famStruktur(mo, g)}</div>`;
   }
   /** Struktur, die alle Fahrzeuge der Familie erben */
@@ -8474,6 +8638,24 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
       return `<section class="kb-abschnitt"><div class="kb-abkopf"><span class="kb-abmarke">Überschrift</span><input id="kb-ab-${esc(E.slug(ab) || "x")}" class="flach" data-chg="kbAbName" data-ab="${esc(ab)}" value="${esc(ab || "Ohne Überschrift")}" aria-label="Überschrift" ${St().dis()}></div>
         ${gs.length ? `<div class="kb-gruppe fest"><div class="kb-gkopf"><b>Grundausstattung</b><span class="gedimmt klein">fest enthalten, keine Auswahl</span></div><div class="kb-chips">${gs.map(({ g, i }) => `<span class="kb-chip std"><code>${esc(g.code)}</code><span class="kb-cn">${esc(g.name)}</span>${ro() ? "" : `<button type="button" data-act="kbGaWeg" data-i="${i}" title="Entfernen" aria-label="Entfernen">✕</button>`}</span>`).join("")}</div></div>` : ""}
         ${ms.map(karte).join("")}</section>`; }).join("");
+  }
+  /** Eine Position (Gruppe) eines Fahrzeugs: Art der Auswahl, Codes mit Feldtyp, Regeln */
+  function position(mo, p, x, karte) {
+    const rs = regelnZu(mo, p, x.m.id), m = x.m; K.st.kontext = "p:" + p.id;
+    const andere = mo.produkte.filter(q => q !== p && E.produktMerkmale(mo, q).some(y => y.m.id === m.id));
+    return `<div class="panel kb-objekt kb-position" data-drop="m:${m.id}">
+      <div class="eyebrow">${E.gruppenPfad(mo, p.gruppe).map(g => esc(g.name)).join(" › ")} › <button type="button" class="link" data-act="kbPosZurueck">${esc(p.name)}</button>${m.abschnitt ? ` › ${esc(m.abschnitt)}` : ""}</div>
+      <div class="kb-kopf"><h2 class="kb-postitel">${esc(m.name)}${m.code ? ` <code>${esc(m.code)}</code>` : ""}</h2><button type="button" class="btn klein" data-act="kbPosZurueck">← Alle Positionen</button></div>
+      <div class="formgitter kb-posfelder">
+        <div class="feld"><label for="kb-pos-typ">Wie wird ausgewählt?</label><select id="kb-pos-typ" data-act="kbMTyp" data-m="${m.id}" ${St().dis()}>${E.GRUPPENTYPEN.map(([k, n]) => `<option value="${k}" ${E.gruppentyp(m) === k ? "selected" : ""}>${n}</option>`).join("")}</select><span class="klein gedimmt">${({ kacheln: "genau einen Code wählen, als Kacheln mit Bild", liste: "genau einen Code wählen, als Liste", dropdown: "genau einen Code wählen, als Auswahlfeld", mehrfach: "beliebig viele Codes ankreuzen" })[E.gruppentyp(m)] || ""}. Einzelne Codes können darunter einen eigenen Feldtyp haben (Ja/Nein, Zahl, Freitext, fest).</span></div>
+        ${m.typ !== "mehrfach" && E.wahlWerte(m, x.werte).length ? `<div class="feld"><label class="haken"><input type="checkbox" data-act="kbMPflicht" data-m="${m.id}" ${m.pflicht ? "checked" : ""} ${St().dis()}> Pflicht, ohne Vorauswahl</label><span class="klein gedimmt">Der Vertrieb muss selbst wählen.</span></div>` : ""}
+      </div>
+      ${andere.length ? `<p class="hinweis klein">Diese Position gibt es auch bei ${andere.length} weiteren Fahrzeug${andere.length === 1 ? "" : "en"} (${andere.slice(0, 3).map(q => esc(q.name)).join(", ")}${andere.length > 3 ? " …" : ""}). Name, Auswahlart und Feldtypen gelten dort ebenfalls.</p>` : ""}
+      <h3>Codes</h3>${karte(x)}
+      <section class="kb-posregeln"><div class="panelkopf"><h3>Regeln <span class="gedimmt">${rs.length}</span></h3>${ro() ? "" : `<span class="row"><button class="btn klein primary" type="button" data-act="kbRegelNeu" data-m="${m.id}" data-rolle="dann" title="Wenn etwas anderes gewählt ist, wird diese Position eingeschränkt">+ Regel: schränkt „${esc(m.name)}“ ein</button><button class="btn klein" type="button" data-act="kbRegelNeu" data-m="${m.id}" data-rolle="wenn" title="Die Auswahl hier schränkt andere Positionen ein">+ Regel: „${esc(m.name)}“ schränkt ein</button></span>`}</div>
+        ${rs.length ? `<div class="regelkarten">${rs.map(r => r.typ === "tabelle" ? `<div class="regelkarte"><div class="regelkopf"><b>${esc(r.id)}</b> Kombinationstabelle ${esc(r.name || "")} <a class="link" href="#studio-regeln" data-act="kbZuRegeln" data-p="${p.id}">in Regeln bearbeiten</a></div></div>` : K.studio.regelKarte(mo, r)).join("")}</div>` : `<p class="klein gedimmt">Noch keine Regeln für diese Position bei ${esc(p.name)}. Regeln sperren Codes, erlauben nur bestimmte oder wählen automatisch, abhängig von der Auswahl in anderen Positionen.</p>`}
+        <p class="klein gedimmt">Neue Regeln gelten für ${esc(p.name)}. Im Regel-Editor unter „Gilt für“ auf die ganze Familie erweiterbar.</p></section>
+    </div>`;
   }
   function fahrzeug(mo, p) {
     const kb = K.kb, pm = E.produktMerkmale(mo, p), q = kb.codeSuche.toLowerCase(), a = K.Store.artikelZu(p.code);
@@ -8497,6 +8679,9 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
             ${ro() ? "" : `<button type="button" class="kb-x" data-act="kbWWeg" data-m="${x.m.id}" data-w="${w.id}" title="Vom Fahrzeug entfernen" aria-label="Entfernen">✕</button>`}
             ${K.wertExtras(x.m, w, "kb")}</div>`; }).join("")}</div></article>`;
     };
+    const posX = kb.pos && pm.find(x => x.m.id === kb.pos);
+    if (kb.pos && !posX) kb.pos = null;
+    if (posX) return position(mo, p, posX, karte);
     return `<div class="panel kb-objekt" data-drop="p:${p.id}">
       <div class="eyebrow">${E.gruppenPfad(mo, p.gruppe).map(x => esc(x.name)).join(" › ") || "Ohne Familie"} ›</div>
       <div class="kb-kopf"><input id="kb-pname" class="flach titelfeld" data-chg="kbPFeld" data-k="name" value="${esc(p.name)}" aria-label="Name" ${St().dis()}>
@@ -8519,38 +8704,61 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
         ${ro() ? "" : `<div class="kb-ablage klein" data-drop="m:__neu">Hierher ziehen = neue Gruppe</div>`}</div></div>`;
   }
 
-  function pool(mo) {
-    const kb = K.kb, o = objekt(kb.sel), istFz = kb.sel[0] === "p", istFam = kb.sel[0] === "g", q = kb.poolSuche.trim();
-    const vorhanden = new Set(); if (istFz) for (const x of E.produktMerkmale(mo, o)) for (const w of x.werte) if (w.code) vorhanden.add(norm(w.code));
-    for (const p of mo.produkte) if (p.code && !istFz) vorhanden.add(norm(p.code));
-    // Verwendung: in wie vielen Fahrzeugen steckt der Artikel als Code oder ist er selbst ein Fahrzeug
-    const nutzung = new Map(); for (const p of mo.produkte) { if (p.code) nutzung.set(norm(p.code), "Fahrzeug"); for (const x of E.produktMerkmale(mo, p)) for (const w of x.werte) if (w.code) { const C = norm(w.code), alt = nutzung.get(C); if (alt !== "Fahrzeug") nutzung.set(C, (alt || 0) + 1); } }
-    let liste = [];
-    if (kb.poolTab === "artikel") {
-      if (K.Store.artikelQuelle) liste = (q ? K.Store.artikelSuche(q, 600) : [...K.Store.artikel.values()].slice(0, 300)).map(a => ({ code: a.code, name: a.name, preis: a.preis }));
-      if (kb.poolFilter === "frei") liste = liste.filter(a => !nutzung.has(norm(a.code))); else if (kb.poolFilter === "benutzt") liste = liste.filter(a => nutzung.has(norm(a.code)));
-      liste = liste.slice(0, 300);
-    } else {
-      const ql = q.toLowerCase(); for (const m of mo.merkmale) for (const w of m.werte) if (w.code && (!ql || (w.code + " " + w.name + " " + m.name).toLowerCase().includes(ql))) liste.push({ code: w.code, name: w.name, preis: w.preis, gruppe: m.name });
-      liste = liste.slice(0, 400);
-    }
-    const n = kb.poolWahl.size;
-    return `<aside class="panel kb-pool">
-      <div class="tabs-innen klein" role="tablist"><button type="button" role="tab" data-act="kbPoolTab" data-t="artikel" aria-selected="${kb.poolTab === "artikel"}">Artikelstamm</button><button type="button" role="tab" data-act="kbPoolTab" data-t="codes" aria-selected="${kb.poolTab === "codes"}">Codes im Modell</button></div>
-      ${kb.poolTab === "artikel" && K.Store.artikelQuelle ? `<div class="kb-filter" role="radiogroup" aria-label="Filter">${[["", "alle"], ["frei", "noch nicht verwendet"], ["benutzt", "schon verwendet"]].map(([k, n]) => `<button type="button" class="chipbtn" data-act="kbPoolFilter" data-f="${k}" aria-pressed="${(kb.poolFilter || "") === k}">${n}</button>`).join("")}</div>` : ""}
-      <input id="kb-psuche" type="search" data-in="kbPSuche" placeholder="${kb.poolTab === "artikel" ? "Artikelnummer oder Bezeichnung" : "Code, Bezeichnung oder Gruppe"}" value="${esc(kb.poolSuche)}" autocomplete="off">
-      ${kb.poolTab === "artikel" && !K.Store.artikelQuelle ? `<div class="hinweis klein">Kein Artikelstamm geladen. In APplus die Abfrage <code>queries.artikel</code> auf Tabelle ARTIKEL einrichten oder unter Excel-Import › Familien und Varianten eine Mappe mit Blatt „Import“ einlesen. Codes lassen sich auch über „Liste einfügen“ eintragen.</div>` : ""}
-      <div class="kb-poolaktion">${n ? `<b>${n}</b> ausgewählt · <button type="button" class="link" data-act="kbPoolLeer">aufheben</button>` : `<span class="gedimmt klein">Ankreuzen für mehrere, dann ziehen</span>`}
-        ${n && istFz && !ro() ? `<button class="btn primary klein" type="button" data-act="kbPoolZuFz">Zum Fahrzeug hinzufügen</button>` : ""}${n && istFam && !ro() ? `<button class="btn primary klein" type="button" data-act="kbPoolZuFam">Als Fahrzeuge hinzufügen</button><button class="btn klein" type="button" data-act="kbPoolCodesFam" title="Die angekreuzten Artikel werden Vertriebscodes, die jedes Fahrzeug dieser Familie erbt">Als Codes für die ganze Familie</button>` : ""}</div>
-      <ul class="kb-poolliste">${liste.map(a => { const da = vorhanden.has(norm(a.code)), an = kb.poolWahl.has(a.code);
-        return `<li class="${da ? "da" : ""}${an ? " an" : ""}" draggable="${!ro()}" data-drag="a:${esc(a.code)}"><label><input type="checkbox" data-act="kbPoolWahl" data-c="${esc(a.code)}" ${an ? "checked" : ""}><code>${esc(a.code)}</code><span>${esc(a.name)}${a.gruppe ? ` <i class="gedimmt">${esc(a.gruppe)}</i>` : ""}</span></label>${nutzung.has(norm(a.code)) ? `<span class="kb-nutz" title="${nutzung.get(norm(a.code)) === "Fahrzeug" ? "ist ein Fahrzeug im Katalog" : "als Code in " + nutzung.get(norm(a.code)) + " Fahrzeugen"}">${nutzung.get(norm(a.code)) === "Fahrzeug" ? "Fzg." : "×" + nutzung.get(norm(a.code))}</span>` : ""}<span class="num klein">${a.preis ? K.eur(a.preis) : ""}</span></li>`; }).join("")}</ul>
-      ${kb.poolTab === "artikel" && K.Store.artikelQuelle && !q ? `<p class="klein gedimmt">${K.zahl(K.Store.artikel.size)} Artikel. Suchen grenzt die Liste ein.</p>` : ""}
-      ${liste.length ? `<button type="button" class="link klein" data-act="kbPoolAlle">alle ${liste.length} angezeigten ankreuzen</button>` : ""}</aside>`;
+  /* Artikelsuche rechts: nur ein Suchfeld mit Vorschlägen (Autocomplete). Treffer per „Übernehmen“,
+     Enter oder Ziehen in den Katalog. Gesucht wird im APplus-Artikelstamm und in den Codes des Modells. */
+  function treffer(mo, q) {
+    q = q.trim(); if (!q) return [];
+    const out = [], gesehen = new Set(), ql = q.toLowerCase();
+    if (K.Store.artikelQuelle) for (const a of K.Store.artikelSuche(q, 40)) { const C = norm(a.code); if (gesehen.has(C)) continue; gesehen.add(C); out.push({ code: a.code, name: a.name, preis: a.preis, bild: a.bild }); }
+    // Codes aus dem Modell nur, wenn kein echter Artikelstamm (APplus oder Excel) geladen ist
+    if (!K.Store.artikelQuelle || K.Store.artikelQuelle === "beispiel") for (const m of mo.merkmale) for (const w of m.werte) { if (!w.code || out.length >= 40) continue; const C = norm(w.code); if (gesehen.has(C) || !(w.code + " " + w.name).toLowerCase().includes(ql)) continue; gesehen.add(C); out.push({ code: w.code, name: w.name, preis: w.preis, gruppe: m.name }); }
+    const vorn = out.filter(x => x.code.toLowerCase().startsWith(ql)); return [...vorn, ...out.filter(x => !vorn.includes(x))].slice(0, 40);
   }
+  function quellZeile() {
+    const st = K.Store.abfrageStatus?.artikel, q = K.Store.artikelQuelle, n = K.Store.artikel.size, name = K.Store.abfragen().artikel;
+    if (q === "applus") return `<p class="kb-quelle ok klein">Quelle: APplus-Abfrage <code>${esc(st?.name || name)}</code> · ${K.zahl(n)} Artikel</p>`;
+    if (q === "excel") return `<p class="kb-quelle klein">Quelle: Artikel aus Excel-Import · ${K.zahl(n)} Artikel</p>`;
+    const grund = name ? (st?.fehler ? `Abfrage <code>${esc(name)}</code> nicht geladen: ${esc(st.fehler)}` : `Abfrage <code>${esc(name)}</code> nicht geladen`) : "Keine Artikel-Abfrage eingetragen";
+    return `<div class="hinweis klein kb-quelle"><b>${grund}.</b> Die Vorschläge kommen aus Beispieldaten bzw. den Codes im Modell. ${ro() ? "" : `<a href="#studio-einstellungen" data-act="geheAbfragen">Abfrage eintragen und testen</a>`}</div>`;
+  }
+  function pool(mo) {
+    const kb = K.kb, o = objekt(kb.sel), istFz = kb.sel[0] === "p", istFam = kb.sel[0] === "g", q = kb.poolSuche;
+    const vorhanden = new Set(); if (o && (istFz || istFam)) for (const x of istFz ? E.produktMerkmale(mo, o) : (o.merkmale || []).map(z => ({ werte: (E.merkmal(mo, z.id)?.werte || []).filter(w => !z.werte || z.werte.includes(w.id)) }))) for (const w of x.werte) if (w.code) vorhanden.add(norm(w.code));
+    const nutzung = new Map(); for (const p of mo.produkte) { if (p.code) nutzung.set(norm(p.code), "Fahrzeug"); for (const x of E.produktMerkmale(mo, p)) for (const w of x.werte) if (w.code) { const C = norm(w.code), alt = nutzung.get(C); if (alt !== "Fahrzeug") nutzung.set(C, (alt || 0) + 1); } }
+    const liste = treffer(mo, q), ziel = !ro() && o && (istFz || istFam), neu = liste.filter(a => !vorhanden.has(norm(a.code)));
+    if (kb.acIdx >= liste.length) kb.acIdx = Math.max(0, liste.length - 1);
+    const zielText = istFz ? `Ziel: <b>${esc(o.name)}</b>${kb.ziel && E.merkmal(mo, kb.ziel) ? ` › ${esc(E.merkmal(mo, kb.ziel).name)}` : ""}` : istFam ? `Ziel: Familie <b>${esc(o.name)}</b> (gilt für alle Fahrzeuge darin)` : "Links ein Fahrzeug oder eine Familie wählen.";
+    return `<aside class="panel kb-pool">
+      <h3 class="kb-pooltitel">Codes hinzufügen</h3>
+      <div class="kb-ac">
+        <input id="kb-psuche" type="search" data-in="kbPSuche" role="combobox" aria-autocomplete="list" aria-expanded="${!!liste.length}" aria-controls="kb-ac-liste" ${liste.length ? `aria-activedescendant="kb-ac-${kb.acIdx || 0}"` : ""} aria-label="Artikel suchen" placeholder="Artikelnummer oder Bezeichnung" value="${esc(q)}" autocomplete="off">
+        ${q.trim() ? (liste.length ? `<ul id="kb-ac-liste" class="kb-ac-liste" role="listbox">${liste.map((a, i) => { const da = vorhanden.has(norm(a.code)), nz = nutzung.get(norm(a.code));
+          return `<li id="kb-ac-${i}" role="option" aria-selected="${i === (kb.acIdx || 0)}" class="${da ? "da" : ""}" draggable="${!ro()}" data-drag="a:${esc(a.code)}" data-act="kbAcZeile" data-i="${i}">
+            <span class="kb-ac-text">${a.bild ? `<span class="kb-ac-bild">${K.bildMitErsatz(a.bild, "")}</span>` : ""}<code>${esc(a.code)}</code> <span>${esc(a.name || "")}</span>${a.gruppe ? ` <i class="gedimmt">${esc(a.gruppe)}</i>` : ""}</span>
+            <span class="kb-ac-info">${da ? `<span class="kb-nutz">schon drin</span>` : nz ? `<span class="kb-nutz" title="${nz === "Fahrzeug" ? "ist ein Fahrzeug im Katalog" : "als Code in " + nz + " Fahrzeugen"}">${nz === "Fahrzeug" ? "Fzg." : "×" + nz}</span>` : ""}<span class="num klein">${a.preis ? K.eur(a.preis) : ""}</span></span>
+            ${ziel && !da ? `<span class="kb-ac-knopf">${istFam ? `<button type="button" class="btn klein ghost" data-act="kbAlsFz" data-c="${esc(a.code)}" title="Als Fahrzeug in dieser Familie anlegen">als Fahrzeug</button>` : ""}<button type="button" class="btn klein primary" data-act="kbUebernehmen" data-c="${esc(a.code)}">Übernehmen</button></span>` : ""}</li>`; }).join("")}</ul>`
+          : `<p class="kb-ac-leer klein">Kein Artikel gefunden.</p>`) : ""}
+      </div>
+      <p class="klein ${ziel ? "" : "gefahr-text"}">${zielText}</p>
+      ${q.trim() && ziel && neu.length > 1 ? `<button type="button" class="btn klein" data-act="kbAlleUebernehmen">Alle ${neu.length} neuen Treffer übernehmen</button>` : ""}
+      ${!q.trim() ? `<p class="klein gedimmt">Tippen, dann mit <b>Übernehmen</b>, <kbd>Enter</kbd> oder per Ziehen in den Katalog. <kbd>↑</kbd> <kbd>↓</kbd> wählen den Vorschlag.${istFz ? " Ziehen auf eine Gruppe legt den Code dort ab." : ""}</p>` : ""}
+      ${quellZeile()}</aside>`;
+  }
+
 
   /* ---------- Aktionen ---------- */
   const A = K.act, I = K.inp;
-  A.kbWahl = el => { K.kb.sel = el.dataset.s; K.kb.loeschen = null; K.kb.codeSuche = ""; K.render(); };
+  A.kbWahl = el => { const kb = K.kb; kb.sel = el.dataset.s; kb.pos = el.dataset.pos || null; kb.ziel = kb.pos || ""; kb.loeschen = null; kb.codeSuche = ""; if (kb.pos) kb.offen[kb.sel] = true; K.render(); K.nach(v => v.querySelector(".kb-mitte")?.scrollIntoView({ block: "nearest" })); };
+  A.kbZuRegeln = el => { K.st.kontext = "p:" + el.dataset.p; K.st.regelTab = "tabellen"; K.gehe("studio-regeln"); };
+  A.kbRestLoeschen = async el => { const ids = el.dataset.p ? [el.dataset.p] : K.nurImKatalog().map(p => p.id); K.sheetZu(); const lv = S().live || { produkte: [] }, namen = ids.map(id => (lv.produkte.find(x => x.id === id) || E.produkt(ent(), id) || { name: id }).name); await K.Store.endgueltigLoeschen({ produkte: ids }, ids.length === 1 ? `Fahrzeug ${namen[0]} gelöscht` : `${ids.length} Fahrzeuge gelöscht: ${namen.join(", ")}`); K.toast(`${ids.length === 1 ? "Fahrzeug" : ids.length + " Fahrzeuge"} gelöscht. Zurückholen über Studio › Protokoll.`); K.render(); };
+  A.kbAufP = el => { const k = "p:" + el.dataset.p, kb = K.kb; kb.offen[k] = !(kb.offen[k] ?? (kb.sel === k)); K.render(); };
+  A.kbPosZurueck = () => { K.kb.pos = null; K.kb.ziel = ""; K.render(); };
+  A.kbRegelNeu = el => {
+    const mo = ent(), pid = K.kb.sel.slice(2), mid = el.dataset.m, id = E.neueId("R", mo.regeln.map(r => r.id)), alsDann = el.dataset.rolle !== "wenn";
+    mo.regeln.push({ id, name: "", aktiv: true, produkte: [pid], gruppen: [], wenn: [{ merkmal: alsDann ? "" : mid, op: "ist", werte: [] }], dann: { typ: "sperren", merkmal: alsDann ? mid : "", werte: [] }, hinweis: "" });
+    K.st.kontext = "p:" + pid; K.st.regelOffen = id; geaendert(`Regel ${id} für ${E.merkmal(mo, mid)?.name} angelegt`);
+    K.nach(v => v.querySelector(".kb-posregeln .regelkarte.offen")?.scrollIntoView({ block: "center" }));
+  };
   A.kbAuf = el => { K.kb.offen[el.dataset.g] = !(K.kb.offen[el.dataset.g] ?? true); K.render(); };
   A.kbFamNeu = el => {
     const mo = ent(), eltern = el.dataset.g || null, g = { id: eindeutig("familie", mo.gruppen), name: "Neue Familie", eltern, merkmale: [] };
@@ -8564,20 +8772,19 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
   I.kbPFeld = el => { const p = objekt(K.kb.sel), k = el.dataset.k; p[k] = k === "basispreis" ? (+el.value || 0) : el.value; if (k === "basispreis" && K.Store.artikelZu(p.code)) p.apStamm = false; geaendert(`${p.name}: ${k === "basispreis" ? "Grundpreis" : k === "name" ? "Name" : "Beschreibung"} geändert`); };
   A.kbPFam = el => { const p = objekt(K.kb.sel); p.gruppe = el.value; geaendert(`${p.name} nach ${gruppe(el.value)?.name} verschoben`); };
   A.kbPAktiv = el => { const p = objekt(K.kb.sel); p.aktiv = el.checked; geaendert(`${p.name} ${el.checked ? "im Katalog sichtbar" : "ausgeblendet"}`); };
-  A.kbLoeschen = () => {
-    const kb = K.kb, mo = ent(); if (kb.loeschen !== kb.sel) { kb.loeschen = kb.sel; return K.render(); }
-    const o = objekt(kb.sel);
-    if (kb.sel[0] === "g") {
-      for (const k of kinder(o.id)) k.eltern = o.eltern || null; for (const p of fahrzeuge(o.id)) p.gruppe = o.eltern || (mo.gruppen.find(x => x.id !== o.id)?.id || "");
-      E.ausGeltungEntfernen(mo, [o.id], []); mo.gruppen = mo.gruppen.filter(g => g !== o);
-      geaendert(`Familie ${o.name} gelöscht, Inhalt eine Ebene höher`);
-    } else { E.ausGeltungEntfernen(mo, [], [o.id]); mo.produkte = mo.produkte.filter(p => p !== o); geaendert(`Fahrzeug ${o.name} gelöscht`); }
-    kb.sel = o.eltern ? "g:" + o.eltern : o.gruppe ? "g:" + o.gruppe : ""; kb.loeschen = null; K.render();
+  A.kbKachelLoeschen = el => { K.kb.kachelLoeschen = el.dataset.p || null; K.render(); };
+  A.kbKachelLoeschenOk = async el => { const p = E.produkt(ent(), el.dataset.p); K.kb.kachelLoeschen = null; if (!p) return K.render(); if (K.kb.sel === "p:" + p.id) K.kb.sel = ""; await K.Store.endgueltigLoeschen({ produkte: [p.id] }, `Fahrzeug ${p.name} (${p.code || p.id}) gelöscht`); K.toast(`${p.name} gelöscht. Zurückholen über Studio › Protokoll.`); K.render(); };
+  A.kbLoeschen = async () => {
+    const kb = K.kb; if (kb.loeschen !== kb.sel) { kb.loeschen = kb.sel; return K.render(); }
+    const o = objekt(kb.sel), fam = kb.sel[0] === "g"; kb.loeschen = null; kb.sel = ""; kb.pos = null; if (!o) return K.render();
+    if (fam) { const n = E.familienArtikel(ent(), o.id).length; await K.Store.endgueltigLoeschen({ gruppen: [o.id] }, `Familie ${o.name} mit ${n} Fahrzeug${n === 1 ? "" : "en"} gelöscht`); K.toast(`${o.name} gelöscht. Zurückholen über Studio › Protokoll.`); }
+    else { await K.Store.endgueltigLoeschen({ produkte: [o.id] }, `Fahrzeug ${o.name} (${o.code || o.id}) gelöscht`); K.toast(`${o.name} gelöscht. Zurückholen über Studio › Protokoll.`); }
+    K.render();
   };
   A.kbLeeren = () => {
     const kb = K.kb; if (!kb.leeren) { kb.leeren = true; K.render(); setTimeout(() => { kb.leeren = false; }, 6000); return; }
-    const mo = ent(); Object.assign(mo, { gruppen: [], produkte: [], merkmale: [], regeln: [] }); kb.leeren = false; kb.sel = "";
-    geaendert("Entwurf geleert, Katalog wird neu aufgebaut");
+    kb.leeren = false; kb.sel = ""; kb.pos = null;
+    K.Store.endgueltigLoeschen({ alles: true }, "Katalog komplett geleert (Neu beginnen)").then(() => { K.toast("Katalog geleert. Zurückholen über Studio › Protokoll."); K.render(); });
   };
   A.kbVorschau = () => { K.kat.entwurf = true; K.kat.gruppe = K.kb.sel[0] === "g" ? K.kb.sel.slice(2) : ""; K.gehe("katalog"); };
   // Codes und Gruppen am Fahrzeug
@@ -8636,14 +8843,36 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     geaendert(`Überschrift „${neu}“`); };
   A.kbGaWeg = el => { const p = objekt(K.kb.sel); p.grundausstattung.splice(+el.dataset.i, 1); geaendert(`Grundausstattung von ${p.name} geändert`); };
   function meldung(p, r) {
-    geaendert(`${r.neu} neue Codes bei ${p.name}`);
-    const t = [r.neu ? `${r.neu} neue Codes` : "", r.schon ? `${r.schon} waren schon da` : "", r.anders ? `${r.anders} stehen bereits in einer anderen Gruppe und bleiben dort` : ""].filter(Boolean).join(", ");
+    geaendert(`${r.neu === 1 ? "1 neuer Code" : r.neu + " neue Codes"} bei ${p.name}`);
+    const t = [r.neu ? (r.neu === 1 ? "1 neuer Code" : `${r.neu} neue Codes`) : "", r.schon ? `${r.schon} waren schon da` : "", r.anders ? `${r.anders} stehen bereits in einer anderen Gruppe und bleiben dort` : ""].filter(Boolean).join(", ");
     K.toast(t || "Codes hinzugefügt");
     if (r.neuGruppe) K.nach(v => { const f = v.querySelector("#kb-mn-" + r.neuGruppe.id); if (f) { f.focus(); f.select(); } });
   }
   // Baukasten
   A.kbPoolTab = el => { K.kb.poolTab = el.dataset.t; K.kb.poolWahl.clear(); K.render(); };
-  I.kbPSuche = el => { K.kb.poolSuche = el.value; K.render(); K.nach(v => { const f = v.querySelector("#kb-psuche"); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); } }); };
+  const sucheFokus = () => K.nach(v => { const f = v.querySelector("#kb-psuche"); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); v.querySelector('.kb-ac-liste [aria-selected="true"]')?.scrollIntoView({ block: "nearest" }); } });
+  I.kbPSuche = el => { K.kb.poolSuche = el.value; K.kb.acIdx = 0; K.render(); sucheFokus(); };
+  /** Codes an das gewählte Fahrzeug bzw. die Familie hängen, danach Suchfeld leeren für den nächsten Code */
+  const uebernehmen = codes => {
+    const o = objekt(K.kb.sel), t = K.kb.sel[0]; if (!o || ro() || !codes.length) return;
+    K.kb.poolSuche = ""; K.kb.acIdx = 0;
+    if (t === "p") mitOrdnen(o, codes, codesZuFahrzeug(o, codes, K.kb.ziel));
+    else if (t === "g") { o.merkmale ||= []; const r = codesZuFahrzeug(o, codes, K.kb.ziel); geaendert(`${codes.length} Codes an Familie ${o.name}`); K.toast(`${codes.length === 1 ? codes[0] + " gilt" : codes.length + " Codes gelten"} jetzt für alle Fahrzeuge in ${o.name}${r.schon ? ` (${r.schon} waren schon da)` : ""}`); }
+    else return;
+    K.render(); sucheFokus();
+  };
+  A.geheAbfragen = () => K.gehe("studio-einstellungen");
+  A.kbUebernehmen = (el, e) => { e?.stopPropagation?.(); uebernehmen([el.dataset.c]); };
+  A.kbAlleUebernehmen = () => { const mo = ent(), o = objekt(K.kb.sel), da = new Set(); if (K.kb.sel[0] === "p") for (const x of E.produktMerkmale(mo, o)) for (const w of x.werte) if (w.code) da.add(norm(w.code)); uebernehmen(treffer(mo, K.kb.poolSuche).map(a => a.code).filter(c => !da.has(norm(c)))); };
+  A.kbAlsFz = (el, e) => { e?.stopPropagation?.(); const g = objekt(K.kb.sel); if (!g) return; const r = fahrzeugeAnlegen(g.id, [el.dataset.c]); K.kb.poolSuche = ""; geaendert(`${el.dataset.c} als Fahrzeug in ${g.name}`); K.toast(r.neu ? `${el.dataset.c} als Fahrzeug angelegt` : r.verschoben ? `${el.dataset.c} hierher verschoben` : `${el.dataset.c} ist schon ein Fahrzeug`); sucheFokus(); };
+  A.kbAcZeile = (el, e) => { if (e?.target?.closest?.("button")) return; K.kb.acIdx = +el.dataset.i; K.render(); sucheFokus(); };
+  document.addEventListener("keydown", e => {
+    const f = e.target; if (!f || f.id !== "kb-psuche" || !K.root || !K.root.contains(f)) return;
+    const n = K.root.querySelectorAll(".kb-ac-liste [role=option]").length, kb = K.kb;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { if (!n) return; e.preventDefault(); kb.acIdx = ((kb.acIdx || 0) + (e.key === "ArrowDown" ? 1 : -1) + n) % n; K.render(); sucheFokus(); }
+    else if (e.key === "Enter") { e.preventDefault(); const li = K.root.querySelector(`#kb-ac-${kb.acIdx || 0}`), b = li?.querySelector("[data-act=kbUebernehmen]"); if (b) uebernehmen([b.dataset.c]); else if (li) K.toast(objekt(kb.sel) ? "Dieser Code ist schon drin." : "Links ein Fahrzeug oder eine Familie wählen."); }
+    else if (e.key === "Escape" && kb.poolSuche) { e.preventDefault(); kb.poolSuche = ""; kb.acIdx = 0; K.render(); sucheFokus(); }
+  });
   A.kbPoolWahl = el => { const s = K.kb.poolWahl; el.checked ? s.add(el.dataset.c) : s.delete(el.dataset.c); K.render(); };
   A.kbPoolLeer = () => { K.kb.poolWahl.clear(); K.render(); };
   A.kbPoolAlle = () => { K.root.querySelectorAll(".kb-poolliste input[data-c]").forEach(i => K.kb.poolWahl.add(i.dataset.c)); K.render(); };
@@ -9457,7 +9686,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
             <td><span class="apx-kl"><input id="apx-k-${p.id}" class="mono kurz" data-chg="apxKlasse" data-p="${p.id}" value="${esc(AP.klasseVon(p, opts))}" maxlength="12" aria-label="Attributklasse" ${dis}>${eigen && !ro() ? `<button type="button" class="btn klein ghost" data-act="apxKlasseZurueck" data-p="${p.id}" title="Wieder aus der Artikelnummer bilden" aria-label="Attributklasse zurücksetzen">↺</button>` : ""}</span></td>
             <td class="r num">${E.produktMerkmale(mo, p).reduce((n, x) => n + x.werte.length, 0)}</td>
             <td class="r">${ro() ? "" : frage ? `<span class="apx-frage"><button type="button" class="btn klein gefahr" data-act="apxLoeschenOk" data-p="${p.id}">Löschen</button><button type="button" class="btn klein ghost" data-act="apxLoeschen" data-p="">Abbrechen</button></span>` : `<button type="button" class="btn klein gefahr-text" data-act="apxLoeschen" data-p="${p.id}" aria-label="${esc(p.name)} löschen">Löschen</button>`}</td></tr>`; }).join("") || `<tr><td colspan="6" class="gedimmt">Noch keine Fahrzeuge mit Codes. Erst im Katalogaufbau anlegen.</td></tr>`}</tbody></table>
-          ${K.apx.loeschen ? `<p class="klein gefahr-text">Das Fahrzeug wird aus dem Entwurf gelöscht (mit seinen Codes-Zuordnungen und Regel-Geltungen). Bis zur nächsten Freigabe bleibt die freigegebene Version unverändert.</p>` : ""}
+          ${K.apx.loeschen ? `<p class="klein gefahr-text">Das Fahrzeug wird aus Katalog aufbauen und aus dem Katalog gelöscht. Zurückholen über Studio › Protokoll.</p>` : ""}
           <p class="klein gedimmt">Attributklasse höchstens 12 Zeichen. Attributgruppen heißen Klasse-ZZ-Code (max. 15 Zeichen).</p></section>
         <section class="panel"><h3>Einstellungen</h3><div class="formgitter">
           <div class="feld"><label for="apx-m">Mandant</label><input id="apx-m" class="mono kurz" data-chg="apxOpt" data-k="mandant" value="${esc(opts.mandant)}" placeholder="leer" ${dis}></div>
@@ -9491,9 +9720,9 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
   K.act.apxLoeschen = el => { K.apx.loeschen = el.dataset.p || null; K.render(); };
   K.act.apxLoeschenOk = el => {
     const mo = S().entwurf, p = fzg(el.dataset.p); if (!p) return; K.apx.loeschen = null;
-    E.ausGeltungEntfernen(mo, [], [p.id]); mo.produkte = mo.produkte.filter(x => x !== p); K.apx.auswahl.delete(p.id);
+    K.apx.auswahl.delete(p.id); K.Store.endgueltigLoeschen({ produkte: [p.id] }, `Fahrzeug ${p.name} (${p.code || p.id}) gelöscht`).then(() => K.render());
     const o = AP.standardOpts(); if ((o.klassen || {})[p.id]) { const k = Object.assign({}, o.klassen); delete k[p.id]; optSetzen("klassen", k); }
-    aenderung(`Fahrzeug ${p.name} gelöscht`); K.toast(`${p.name} gelöscht`); K.render();
+    K.toast(`${p.name} gelöscht. Zurückholen über Studio › Protokoll.`);
   };
   K.act.apxTab = el => { K.apx.tab = el.dataset.t; K.render(); };
   K.act.apxLaden = async el => {
@@ -9505,6 +9734,144 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
 })(typeof window !== "undefined" ? window : globalThis);
 
 
+/* ===== rechte.js ===== */
+/* =====================================================================
+   Rechte: angemeldeten APplus-Benutzer erkennen, Rolle und sichtbare
+   Familien/Fahrzeuge aus einer APplus-Abfrage, Ansicht Studio › Rechte.
+
+   Abfrage „benutzer“ (Vorgabe apx_Benutzer): genau eine Zeile zum angemeldeten
+     Benutzer, Spalten BENUTZER/LOGIN, PERSONAL, NAME (oder VORNAME+NACHNAME), EMAIL.
+   Abfrage „rechte“ (Vorgabe apx_Rechte): je Zuordnung eine Zeile,
+     BENUTZER (Login oder Personalnummer), ROLLE, FAMILIE, FAHRZEUG.
+     ROLLE: Administrator | Produktmanagement | Vertriebsleitung | Vertrieb
+     FAMILIE: Name oder Kennung einer Familie aus „Katalog aufbauen“ (mit Unterfamilien), * = alle
+     FAHRZEUG: Artikelnummer eines einzelnen Fahrzeugs
+   Ohne geladene Rechte-Abfrage gilt alles wie bisher (keine Einschränkung).
+
+   Hinweis: Die Prüfung läuft im Browser. Sie steuert, was angezeigt wird,
+   ersetzt aber keine Berechtigung in APplus selbst.
+   ===================================================================== */
+(function () {
+  const K = window.KONF, E = K.E, esc = K.esc, S = () => K.Store.S;
+  const ROLLEN = {
+    admin: { name: "Administrator", stufe: 4, studio: true, einstellungen: true, rechte: true, alleFahrzeuge: true, alleAngebote: true },
+    produkt: { name: "Produktmanagement", stufe: 3, studio: true, einstellungen: false, rechte: false, alleFahrzeuge: true, alleAngebote: false },
+    leitung: { name: "Vertriebsleitung", stufe: 2, studio: false, einstellungen: false, rechte: false, alleFahrzeuge: true, alleAngebote: true },
+    vertrieb: { name: "Vertrieb", stufe: 1, studio: false, einstellungen: false, rechte: false, alleFahrzeuge: false, alleAngebote: false },
+    keine: { name: "kein Zugriff", stufe: 0, studio: false, einstellungen: false, rechte: false, alleFahrzeuge: false, alleAngebote: false }
+  };
+  const rolleAus = t => { const x = String(t || "").toLowerCase().replace(/[^a-zäöü]/g, ""); if (!x) return null;
+    if (/^(admin|administrator|adm)/.test(x)) return "admin"; if (/^(produkt|pm|produktmanagement|produktmanager)/.test(x)) return "produkt";
+    if (/(leitung|leiter|vl|vertriebsleitung)/.test(x)) return "leitung"; if (/^(vertrieb|vt|verkauf|au(ss|ß)endienst|innendienst)/.test(x)) return "vertrieb"; return null; };
+  const norm = s => String(s ?? "").trim().toLowerCase();
+  const spalten = z => { const n = {}; for (const [k, v] of Object.entries(z || {})) n[String(k).toLowerCase().replace(/[^a-z0-9]/g, "")] = v; const f = (...ks) => { for (const k of ks) if (n[k] != null && String(n[k]).trim() !== "") return String(n[k]).trim(); return ""; }; return f; };
+
+  const R = K.Rechte = { aktiv: false, benutzer: null, rolle: "admin", familien: null, fahrzeuge: null, zeilen: [], meldung: "", simuliert: null };
+  /** Rechte aus den Abfragen bestimmen. Ohne Rechte-Abfrage: keine Einschränkung. */
+  R.bestimmen = () => {
+    const bz = K.Store.benutzerZeilen, rz = K.Store.rechteZeilen;
+    R.zeilen = (rz || []).map(z => { const f = spalten(z); return { benutzer: f("benutzer", "login", "username", "user", "personal", "personalnr"), rolle: rolleAus(f("rolle", "role", "gruppe")), familie: f("familie", "produktfamilie", "produktgruppe", "katalog"), fahrzeug: f("fahrzeug", "artikel", "produkt") }; }).filter(z => z.benutzer);
+    if (bz && bz.length) { const f = spalten(bz[0]); R.benutzer = { login: f("benutzer", "login", "username", "user", "anmeldename"), personal: f("personal", "personalnr", "mitarbeiter", "kuerzel"), name: f("name") || [f("vorname"), f("nachname")].filter(Boolean).join(" "), mail: f("email", "mail"), mehrdeutig: bz.length > 1 }; }
+    else R.benutzer = null;
+    R.aktiv = !!rz;
+    if (R.simuliert) { const s0 = R.simuliert; R.simuliert = null; R.bestimmen(); R.echteRolle = R.rolle; R.simuliert = s0; } else R.echteRolle = null;
+    const wer = R.simuliert || R.benutzer;
+    if (!R.aktiv) { Object.assign(R, { rolle: "admin", familien: null, fahrzeuge: null, meldung: "" }); return R; }
+    if (!wer) { Object.assign(R, { rolle: "keine", familien: new Set(), fahrzeuge: new Set(), meldung: bz ? "Die Benutzer-Abfrage hat keine Zeile geliefert." : "Der angemeldete Benutzer wird nicht erkannt: Die Benutzer-Abfrage fehlt oder ist nicht geladen." }); return R; }
+    const ids = [wer.login, wer.personal, wer.mail].map(norm).filter(Boolean);
+    const meine = R.zeilen.filter(z => ids.includes(norm(z.benutzer)));
+    if (!meine.length) { Object.assign(R, { rolle: "keine", familien: new Set(), fahrzeuge: new Set(), meldung: `Für ${wer.name || wer.login || wer.personal} ist in der Rechte-Abfrage nichts hinterlegt.` }); return R; }
+    const rolle = meine.map(z => z.rolle || "vertrieb").sort((a, b) => ROLLEN[b].stufe - ROLLEN[a].stufe)[0];
+    const fam = new Set(), fz = new Set(); let alle = false;
+    for (const z of meine) { if (z.familie === "*" || norm(z.familie) === "alle") alle = true; else if (z.familie) fam.add(norm(z.familie)); if (z.fahrzeug) fz.add(norm(z.fahrzeug)); }
+    Object.assign(R, { rolle, familien: alle || ROLLEN[rolle].alleFahrzeuge ? null : fam, fahrzeuge: alle || ROLLEN[rolle].alleFahrzeuge ? null : fz, meldung: "", meineZeilen: meine });
+    return R;
+  };
+  R.darf = recht => !!(ROLLEN[R.rolle] || ROLLEN.keine)[recht];
+  R.rollenName = r => (ROLLEN[r || R.rolle] || ROLLEN.keine).name;
+  /** Darf der Benutzer dieses Fahrzeug sehen? Familien zählen mit allen Unterfamilien. */
+  R.siehtProdukt = (mo, p) => {
+    if (!R.familien && !R.fahrzeuge) return true; if (!p) return false;
+    if (p.code && R.fahrzeuge.has(norm(p.code))) return true; if (R.fahrzeuge.has(norm(p.id))) return true;
+    return E.gruppenPfad(mo, p.gruppe).some(g => R.familien.has(norm(g.name)) || R.familien.has(norm(g.id)));
+  };
+  /** Eigener Vertriebseintrag (für Bearbeiter und „eigene Angebote“) */
+  R.meinVertrieb = () => {
+    const wer = R.simuliert || R.benutzer, v = S().einst?.vertrieb || []; if (!wer) return null;
+    const ids = [wer.personal, wer.login, wer.mail, wer.name].map(norm).filter(Boolean);
+    return v.find(x => [x.nr, x.id, x.mail, x.name, x.id?.replace(/^p/, "")].map(norm).some(y => y && ids.includes(y))) || null;
+  };
+  R.istMeinAngebot = a => {
+    const wer = R.simuliert || R.benutzer; if (!wer) return false; const mv = R.meinVertrieb();
+    if (mv && a.bearbeiter === mv.id) return true;
+    const ids = [wer.personal, wer.login, wer.mail].map(norm).filter(Boolean), b = a.bearbeiterInfo || {};
+    return [a.erstelltVon, b.nr, b.mail].map(norm).some(y => y && ids.includes(y));
+  };
+  K.angeboteSichtbar = () => R.darf("alleAngebote") || !R.aktiv ? S().angebote : S().angebote.filter(R.istMeinAngebot);
+  K.produktSichtbar = (mo, p) => !R.aktiv || R.siehtProdukt(mo, p);
+
+  /* ---------- Zugriff je Seite ---------- */
+  const STUDIO = /^studio-/, NUR_ADMIN = new Set(["studio-einstellungen", "studio-rechte"]);
+  R.seiteErlaubt = route => {
+    if (!R.aktiv || /^raum-/.test(route)) return true;
+    if (route === "studio-rechte" && R.simuliert && R.echteRolle === "admin") return true;
+    if (R.rolle === "keine") return false;
+    if (route === "studio-rechte" && R.simuliert && R.echteRolle === "admin") return true;
+    if (NUR_ADMIN.has(route)) return R.darf("einstellungen");
+    if (STUDIO.test(route)) return R.darf("studio");
+    if (/^angebot-/.test(route) && !R.darf("alleAngebote")) { const a = S().angebote.find(x => "angebot-" + x.nr === route); return !a || R.istMeinAngebot(a); }
+    return true;
+  };
+  const keinZugriff = route => `<div class="leer recht-sperre"><h2>${R.rolle === "keine" ? "Kein Zugriff" : "Diese Seite ist für Ihre Rolle nicht freigegeben"}</h2>
+    <p>${esc(R.meldung || `Angemeldet als ${R.benutzer?.name || R.benutzer?.login || "?"} (${R.rollenName()}).`)}</p><p class="klein gedimmt">Rechte werden in APplus über die Abfrage <code>${esc(K.Store.abfragen().rechte || "apx_Rechte")}</code> vergeben. Bitte an einen Administrator wenden.</p>
+    ${R.rolle !== "keine" ? `<p><button class="btn" type="button" data-act="oeffne" data-ziel="katalog">Zum Katalog</button></p>` : ""}</div>`;
+  R.sperre = keinZugriff;
+  // Während der Vorschau oben eine Leiste mit „Vorschau beenden“
+  const altRender = K.render;
+  K.render = () => { altRender(); const v = K.el("konf-view"); if (v && R.simuliert && !v.querySelector(".recht-vorschau")) v.insertAdjacentHTML("afterbegin", `<div class="hinweis warn recht-vorschau"><b>Vorschau als ${esc(R.simuliert.login)}</b> (${esc(R.rollenName())}). So sieht dieser Benutzer die App. <button class="btn klein" type="button" data-act="rechtSimEnde">Vorschau beenden</button></div>`); };
+  K.act.rechtSimEnde = () => { R.simuliert = null; R.bestimmen(); K.navBauen && K.navBauen(); K.gehe("studio-rechte"); };
+
+  /* ---------- Studio › Rechte ---------- */
+  K.route("studio-rechte", () => {
+    const St = K.studio, bz = K.Store.benutzerZeilen, wer = R.benutzer, qs = K.Store.abfragen(), st = K.Store.abfrageStatus || {};
+    const zeile = (t, w) => `<tr><th>${t}</th><td>${w}</td></tr>`;
+    const famName = n => { const g = (S().live || S().entwurf)?.gruppen.find(x => norm(x.name) === n || norm(x.id) === n); return g ? esc(g.name) : `<span class="warntext" title="Keine Familie mit diesem Namen">${esc(n)}</span>`; };
+    const nutzer = [...new Set(R.zeilen.map(z => z.benutzer))];
+    return St.kopf("Rechte", "Wer was sieht, kommt aus APplus: eine Abfrage erkennt den angemeldeten Benutzer, eine zweite ordnet Rollen und Familien zu. Ohne Rechte-Abfrage gibt es keine Einschränkung.") + `
+      <div class="recht-raster">
+      <section class="panel"><h3>Angemeldet</h3><table class="kompakt recht-info"><tbody>
+        ${zeile("Benutzer", wer ? `<b>${esc(wer.name || "–")}</b> · ${esc(wer.login || "–")}${wer.personal ? ` · Pers.-Nr. ${esc(wer.personal)}` : ""}${wer.mehrdeutig ? ` <span class="warntext">Abfrage liefert ${bz.length} Zeilen, verwendet wird die erste</span>` : ""}` : `<span class="warntext">nicht erkannt</span> (${esc(st.benutzer?.fehler || (qs.benutzer ? "Abfrage " + qs.benutzer + " nicht geladen" : "keine Abfrage"))})`)}
+        ${zeile("Rechte-Abfrage", R.aktiv ? `<code>${esc(qs.rechte)}</code> · ${R.zeilen.length} Zuordnungen` : `<span class="gedimmt">nicht geladen${st.rechte?.fehler ? ": " + esc(st.rechte.fehler) : ""}, daher keine Einschränkung</span>`)}
+        ${zeile("Rolle", `<b>${esc(R.rollenName())}</b>${R.simuliert ? ` <span class="chip">Vorschau als ${esc(R.simuliert.login)}</span>` : ""}`)}
+        ${zeile("Sieht", R.familien || R.fahrzeuge ? [...[...(R.familien || [])].map(famName), ...[...(R.fahrzeuge || [])].map(x => `<code>${esc(x)}</code>`)].join(", ") || "keine Fahrzeuge" : "alle Fahrzeuge")}
+        ${zeile("Angebote", R.darf("alleAngebote") || !R.aktiv ? "alle" : "nur eigene" + (R.meinVertrieb() ? ` (als ${esc(R.meinVertrieb().name)})` : ` <span class="warntext">kein passender Eintrag im Vertrieb gefunden</span>`))}
+        ${R.meldung ? zeile("Hinweis", `<span class="warntext">${esc(R.meldung)}</span>`) : ""}
+      </tbody></table>
+      ${nutzer.length ? `<div class="feld" style="margin-top:12px"><label for="recht-sim">Ansicht testen als</label><select id="recht-sim" data-act="rechtSim"><option value="">– ich selbst –</option>${nutzer.map(n => `<option ${R.simuliert?.login === n ? "selected" : ""}>${esc(n)}</option>`).join("")}</select><span class="klein gedimmt">Zeigt die App so, wie dieser Benutzer sie sieht, bis zum Neuladen.</span></div>` : ""}</section>
+      <section class="panel"><h3>Rollen</h3><div class="tabwrap ohne-rand"><table class="kompakt"><thead><tr><th>Rolle</th><th>Studio</th><th>Fahrzeuge</th><th>Angebote</th><th>Einstellungen</th></tr></thead><tbody>
+        ${["admin", "produkt", "leitung", "vertrieb"].map(k => { const r = ROLLEN[k]; return `<tr><td><b>${r.name}</b></td><td>${r.studio ? "ja" : "–"}</td><td>${r.alleFahrzeuge ? "alle" : "zugeordnete"}</td><td>${r.alleAngebote ? "alle" : "eigene"}</td><td>${r.einstellungen ? "ja" : "–"}</td></tr>`; }).join("")}</tbody></table></div>
+        <p class="klein gedimmt">Hat ein Benutzer mehrere Zeilen, gilt die höchste Rolle; Familien und Fahrzeuge werden zusammengezählt. Familien gelten mit allen Unterfamilien.</p></section>
+      </div>
+      <section class="panel"><h3>Zuordnungen aus APplus</h3>${R.zeilen.length ? `<div class="tabwrap"><table class="kompakt"><thead><tr><th>Benutzer</th><th>Rolle</th><th>Familie</th><th>Fahrzeug</th></tr></thead><tbody>
+        ${R.zeilen.map(z => `<tr><td class="mono">${esc(z.benutzer)}</td><td>${z.rolle ? esc(R.rollenName(z.rolle)) : `<span class="warntext">unbekannt, gilt als Vertrieb</span>`}</td><td>${z.familie ? (z.familie === "*" ? "alle" : famName(norm(z.familie))) : ""}</td><td class="mono">${esc(z.fahrzeug)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="gedimmt">Keine Zuordnungen geladen.</p>`}</section>
+      <section class="panel"><h3>Einrichtung in APplus</h3>
+        <p class="klein">1. Abfrage <code>apx_Benutzer</code>: liefert <b>genau eine Zeile</b> zum angemeldeten Benutzer. Wie APplus den angemeldeten Benutzer in eine Abfrage gibt (Platzhalter oder Funktion), weiß Ihre APplus-Betreuung. Beispiel mit Platzhalter:</p>
+        <pre class="code">SELECT BENUTZER, PERSONAL, NAME, EMAIL
+FROM   PERSONAL            -- bzw. Ihre Benutzer-/Personaltabelle
+WHERE  BENUTZER = &lt;angemeldeter Benutzer&gt;</pre>
+        <p class="klein">2. Abfrage <code>apx_Rechte</code>: eine Zeile je Zuordnung. Pflege z. B. in einer kleinen Tabelle oder über vorhandene Rollen/Gruppen:</p>
+        <pre class="code">SELECT BENUTZER, ROLLE, FAMILIE, FAHRZEUG FROM KONF_RECHTE
+-- BENUTZER  Login oder Personalnummer
+-- ROLLE     Administrator | Produktmanagement | Vertriebsleitung | Vertrieb
+-- FAMILIE   Name der Familie aus „Katalog aufbauen“, * = alle
+-- FAHRZEUG  Artikelnummer (optional, einzelnes Fahrzeug)</pre>
+        <p class="klein">3. Beide Abfragen dem Dashboard zuordnen. Heißen sie anders, unter Einstellungen › APplus-Abfragen eintragen.</p>
+        <p class="hinweis klein">Die Prüfung läuft im Browser und steuert die Anzeige. Wer technisch versiert ist, kann sie umgehen. Echte Sperren gehören zusätzlich in die APplus-Abfragen selbst (z. B. Angebote nur des angemeldeten Benutzers ausliefern).</p></section>`;
+  });
+  K.act.rechtSim = el => { const n = el.value; R.simuliert = n ? { login: n, personal: n, name: n } : null; R.bestimmen(); K.navBauen && K.navBauen(); K.render(); K.toast(n ? `Vorschau als ${n}: ${R.rollenName()}` : "Eigene Ansicht"); };
+})();
+
+
 /* ===== app.js ===== */
 /* Start der Anwendung: Navigation, Datenschicht, erstes Zeichnen */
 (function () {
@@ -9512,13 +9879,14 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
 
   const NAV = [
     ["Vertrieb", [["start", "Übersicht", "M3 12h7V3H3zm11 9h7v-9h-7zM3 21h7v-6H3zm11-12h7V3h-7z"], ["katalog", "Katalog", "M4 6h16M4 12h16M4 18h10"], ["konfig", "Konfigurator", "M12 3v4m0 10v4M3 12h4m10 0h4M6 6l2.5 2.5m7 7L18 18M6 18l2.5-2.5m7-7L18 6"], ["angebote", "Angebote", "M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5"], ["kunden", "Kunden", "M16 19v-1a4 4 0 0 0-8 0v1M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM20 19v-1a3 3 0 0 0-2-2.8M4 19v-1a3 3 0 0 1 2-2.8"]]],
-    ["Studio", [["studio-katalog", "Katalog aufbauen", "M3 5h7v6H3zM14 5h7v6h-7zM3 15h7v4H3zM14 15h7v4h-7z"], ["studio-regeln", "Regeln", "M5 5h6v6H5zM13 13h6v6h-6zM11 8h4a2 2 0 0 1 2 2v3"], ["studio-import", "Excel-Import", "M4 4h16v16H4zM4 9h16M9 4v16M12 13l2 3m0-3-2 3"], ["studio-test", "Modelltest", "M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"], ["studio-freigabe", "Freigabe", "M5 12l4 4L19 6"], ["studio-applus", "Nach APplus", "M4 12h12M12 6l6 6-6 6M20 4v16"], ["studio-vorlagen", "Angebotsdesigner", "M5 3h14v18H5zM9 7h6M9 11h6M9 15h3"], ["studio-einstellungen", "Einstellungen", "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"], ["studio-protokoll", "Protokoll", "M12 8v4l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"]]],
+    ["Studio", [["studio-katalog", "Katalog aufbauen", "M3 5h7v6H3zM14 5h7v6h-7zM3 15h7v4H3zM14 15h7v4h-7z"], ["studio-regeln", "Regeln", "M5 5h6v6H5zM13 13h6v6h-6zM11 8h4a2 2 0 0 1 2 2v3"], ["studio-import", "Excel-Import", "M4 4h16v16H4zM4 9h16M9 4v16M12 13l2 3m0-3-2 3"], ["studio-test", "Modelltest", "M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"], ["studio-freigabe", "Freigabe", "M5 12l4 4L19 6"], ["studio-applus", "Nach APplus", "M4 12h12M12 6l6 6-6 6M20 4v16"], ["studio-vorlagen", "Angebotsdesigner", "M5 3h14v18H5zM9 7h6M9 11h6M9 15h3"], ["studio-rechte", "Rechte", "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4"], ["studio-einstellungen", "Einstellungen", "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"], ["studio-protokoll", "Protokoll", "M12 8v4l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"]]],
     ["Experte", [["studio-modell", "Produktmodell", "M4 4h6v5H4zM14 15h6v5h-6zM4 15h6v5H4zM7 9v6M7 12h10v3"], ["studio-produkte", "Produkte", "M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7"], ["studio-merkmale", "Merkmale", "M4 6h10M4 12h16M4 18h7M17 4v4M14 16v4"]]]
   ];
   const ikon = d => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
   function navBauen() {
+    const R = K.Rechte, sichtbar = h => !R || R.seiteErlaubt(h);
     K.el("konf-nav").innerHTML = `<div class="marke"><b>Fahrzeug&shy;konfigurator</b><span>CPQ für Auflieger</span></div>` +
-      NAV.map(([titel, l]) => `<div class="navgruppe"><div class="navtitel">${titel}</div>${l.map(([h, n, d]) => `<a href="#${h}" data-r="${h}">${ikon(d)}<span>${n}</span><span class="badge" data-b="${h}" hidden></span></a>`).join("")}</div>`).join("") +
+      NAV.map(([titel, l]) => [titel, l.filter(([h]) => sichtbar(h))]).filter(([, l]) => l.length).map(([titel, l]) => `<div class="navgruppe"><div class="navtitel">${titel}</div>${l.map(([h, n, d]) => `<a href="#${h}" data-r="${h}">${ikon(d)}<span>${n}</span><span class="badge" data-b="${h}" hidden></span></a>`).join("")}</div>`).join("") +
       `<div class="navfuss" id="konf-navfuss"></div>`;
   }
   const gruppeVon = h => h === "studio-import-vorlage" || h === "studio-import-struktur" ? "studio-import" : h.startsWith("angebot-") ? "angebote" : h.startsWith("kunde-") ? "kunden" : h;
@@ -9526,7 +9894,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     const g = gruppeVon(h);
     K.root.querySelectorAll("#konf-nav a[data-r]").forEach(a => a.dataset.r === g ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
     const setze = (r, n) => { const b = K.root.querySelector(`[data-b="${r}"]`); if (b) { b.hidden = !n; b.textContent = n; } };
-    setze("angebote", S().angebote.filter(a => K.offeneFragen(a).length).length);
+    setze("angebote", (K.angeboteSichtbar ? K.angeboteSichtbar() : S().angebote).filter(a => K.offeneFragen(a).length).length);
     setze("studio-freigabe", K.freigabeOffen());
     const f = K.el("konf-navfuss"), m = K.Store.modus;
     f.innerHTML = m === "db" ? `<span class="punkt ${K.Store.schreiben ? "ok" : "warn"}"></span>${K.Store.schreiben ? "Gemeinsame Daten, live" : "Nur lesen"}` : m === "lokal" ? `<span class="punkt ${K.Store.applusQuellen ? "ok" : "warn"}"></span>${K.Store.applusQuellen ? "APplus-Daten, Änderungen lokal" : "Beispieldaten, im Browser gespeichert"}` : m === "demo" ? `<span class="punkt warn"></span>Demo-Modus, nichts wird gespeichert` : "Wird verbunden …";
@@ -9537,6 +9905,7 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     if (!S().einst || (!S().live && !S().entwurf)) {
       return `<div class="leer"><h2>Willkommen</h2><p>Der Datenspeicher ist noch leer.</p>${K.Store.schreiben ? `<p>Laden Sie das Startmodell mit Aufliegertypen, Regeln und Beispielkunden oder importieren Sie Ihre Excel-Datei.</p><div class="row"><button class="btn primary" type="button" data-act="startmodell">Startmodell laden</button><a class="btn" href="#studio-import">Excel importieren</a></div>` : "<p>Bitte wenden Sie sich an die Person, die diese Anwendung eingerichtet hat.</p>"}</div>`;
     }
+    if (K.Rechte && !K.Rechte.seiteErlaubt(K.ctx?.route || "")) return K.Rechte.sperre(K.ctx?.route || "");
     return null;
   };
 
@@ -9556,17 +9925,38 @@ window.KONF_DEMO_DATEN = window.KONF_DEMO_DATEN || {
     return r;
   }
 
+  /** Fehler beim Start sichtbar machen statt einer leeren Seite */
+  function startFehler(e) {
+    console.error("[Konfigurator] Start fehlgeschlagen:", e);
+    const r = K.root || document.getElementById("konfigurator") || document.body;
+    const box = document.createElement("div");
+    box.setAttribute("style", "margin:16px;padding:14px 16px;border:2px solid #C0392B;border-radius:8px;background:#FFF5F4;color:#222;font:14px/1.45 system-ui,sans-serif");
+    box.innerHTML = "<b>Der Konfigurator konnte nicht starten.</b><br>Bitte diese Meldung weitergeben:<pre style='white-space:pre-wrap;margin:8px 0 0;font-size:12px'></pre>";
+    box.querySelector("pre").textContent = String(e && (e.stack || e.message) || e);
+    r.insertBefore(box, r.firstChild);
+  }
+  function rechteAnwenden() {
+    if (!K.Rechte) return; K.Rechte.bestimmen();
+    const mv = K.Rechte.meinVertrieb(); if (mv) K.Store.meinVertrieb = mv.id;
+    navBauen();
+  }
+  K.navBauen = () => navBauen();
   async function start() {
+    try { await starten(); } catch (e) { startFehler(e); }
+  }
+  async function starten() {
     if (K.gestartet) return; K.gestartet = true;
     K.root = einhaengen();
     navBauen(); K.render();
     try { if (window.claude && window.claude.use) { const [d, a] = await Promise.all([window.claude.use("downloads"), window.claude.use("assets")]); K.downloads = d; K.assets = a; } } catch (e) {}
     K.Store.onChange(was => {
       if (was === "prefs") K.Store.meinVertrieb = S().prefs.vertrieb || null;
+      if (was === "alles") rechteAnwenden();
       K.datenGeaendert();
     });
     await K.Store.init();
     K.Store.meinVertrieb = S().prefs.vertrieb || null;
+    rechteAnwenden();
     K.render();
     if (K.Store.ladefehler && K.Store.ladefehler.length) K.toast(`${K.Store.ladefehler.length} APplus-Abfrage(n) nicht geladen, dort gelten Beispieldaten. Details in der Konsole.`);
   }

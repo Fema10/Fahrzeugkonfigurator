@@ -3,7 +3,7 @@
 const fs = require("fs"), path = require("path"), root = path.join(__dirname, "..");
 const stand = new Date().toISOString().slice(0, 10);
 const css = `/* Fahrzeugkonfigurator ${stand} */\n@import url("https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");\n` + fs.readFileSync(path.join(root, "css/app.css"), "utf8");
-const dateien = ["core", "engine", "store", "viewer3d", "pdf", "sales", "studio", "modell", "excel", "liste", "preise", "katalogbau", "dokument", "applus-da", "applus", "app"];
+const dateien = ["core", "engine", "store", "viewer3d", "pdf", "sales", "studio", "modell", "excel", "liste", "preise", "katalogbau", "dokument", "applus-da", "applus", "rechte", "app"];
 const demo = fs.readFileSync(path.join(root, "daten/demo.json"), "utf8");
 const js = `/* =====================================================================
    Fahrzeugkonfigurator ${stand}
