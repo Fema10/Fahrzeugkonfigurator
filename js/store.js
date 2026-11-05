@@ -61,8 +61,21 @@
 
     /* ---------- Betrieb ohne Claude (z. B. APplus): Browser-Speicher + APplus-Abfragen ---------- */
     _schluessel() { return (K.cfg && K.cfg.storageKey) || "konf-v1"; },
+    /** Abfragenamen: aus KONF_CONFIG, überschrieben durch Studio › Einstellungen › APplus-Abfragen */
+    abfragen() {
+      const aus = Object.assign({}, (K.cfg && K.cfg.queries) || {});
+      let e = this.S && this.S.einst; if (!e) try { e = (JSON.parse(localStorage.getItem(this._schluessel()) || "null") || {}).einst; } catch (x) { e = null; }
+      for (const [k, v] of Object.entries((e && e.abfragen) || {})) if (v != null && String(v).trim() !== "") aus[k] = String(v).trim();
+      if (location.protocol !== "file:") for (const [k, v] of Object.entries(this.STANDARD_ABFRAGEN)) if (!aus[k]) aus[k] = v;
+      return aus;
+    },
+    abfrageStatus: {},
+    /** Vorgabe-Namen: wenn nichts eingetragen ist, wird es mit diesen Abfragen versucht (Fehler dann ohne Meldung) */
+    STANDARD_ABFRAGEN: { benutzer: "apx_Benutzer", rechte: "apx_Rechte" },
+    _standardAbfrage(typ, name) { return this.STANDARD_ABFRAGEN[typ] === name && !((K.cfg.queries || {})[typ]) && !(((this.S && this.S.einst) || {}).abfragen || {})[typ]; },
     async ladeLokal() {
       const S = this.S; let gespeichert = null;
+      if (this._lokalTimer && S.geladen) this._lokalSchreiben(); // noch offene Änderungen zuerst sichern
       try { gespeichert = JSON.parse(localStorage.getItem(this._schluessel()) || "null"); } catch (e) { gespeichert = null; }
       const d = await this.demoDaten();
       const q = await this._applusLaden();
@@ -75,29 +88,32 @@
       }
       if (q.kunden) S.kunden = q.kunden;
       if (q.vertrieb && q.vertrieb.length) { S.einst ||= d.einstellungen; S.einst.vertrieb = q.vertrieb; S.einst.vertriebQuelle = "applus"; }
+      this.benutzerZeilen = q.benutzer || null; this.rechteZeilen = q.rechte || null;
       const ex = q.artikel ? null : this._artikelAusExcel();
       this.artikelSetzen(q.artikel || ex || d.artikel || [], q.artikel ? "applus" : ex && ex.length ? "excel" : "beispiel");
-      if (q.artikel) this.stammAnwenden();
+      if (q.artikel) try { this.stammAnwenden(); } catch (e) { console.warn("[Konfigurator] Stammabgleich mit ARTIKEL übersprungen:", e); }
       if (!S.einst) S.einst = d.einstellungen;
       S.prefs ||= { favoriten: [] }; S.quelle = q.modell ? "applus" : "lokal"; S.geladen = true;
       this._melde("alles");
     },
     async _applusLaden() {
-      const out = {}, cfg = K.cfg || {}, qs = cfg.queries || {}; this.ladefehler = []; this.applusQuellen = 0;
+      const out = {}, cfg = K.cfg || {}, qs = this.abfragen(); this.ladefehler = []; this.applusQuellen = 0; this.abfrageStatus = {};
       if (!cfg.loadQuery) return out;
       const blaetter = {};
-      await Promise.all(["katalog", "produkte", "merkmale", "codes", "regeln", "stueckliste", "kunden", "artikel", "vertrieb"].map(async typ => {
+      await Promise.all(["katalog", "produkte", "merkmale", "codes", "regeln", "stueckliste", "kunden", "artikel", "vertrieb", "benutzer", "rechte"].map(async typ => {
         if (!qs[typ]) return;
         try {
           const rows = await cfg.loadQuery(qs[typ], typ);
-          if (!Array.isArray(rows)) return;
+          if (!Array.isArray(rows)) { this.abfrageStatus[typ] = { name: qs[typ], fehler: location.protocol === "file:" ? "nur innerhalb von APplus abrufbar" : "keine Daten geliefert" }; return; }
+          this.abfrageStatus[typ] = { name: qs[typ], zeilen: rows.length };
           this.applusQuellen++;
           if (typ === "kunden") { out.kunden = rows.map(kundeAusZeile).filter(k => k.firma); return; }
           if (typ === "vertrieb") { out.vertrieb = rows.map(vertriebAusZeile).filter(v => v.name); return; }
           if (typ === "artikel") { out.artikel = rows; return; }
+          if (typ === "benutzer" || typ === "rechte") { out[typ] = rows; return; }
           const kopf = [...new Set(rows.flatMap(r => Object.keys(r)))];
           blaetter[typ] = [kopf, ...rows.map(r => kopf.map(h => r[h] ?? ""))];
-        } catch (e) { console.warn("[Konfigurator] Abfrage fehlgeschlagen:", qs[typ], e); this.ladefehler.push(qs[typ] + ": " + (e.message || e)); }
+        } catch (e) { console.warn("[Konfigurator] Abfrage fehlgeschlagen:", qs[typ], e); if (!this._standardAbfrage(typ, qs[typ])) this.ladefehler.push(qs[typ] + ": " + (e.message || e)); this.abfrageStatus[typ] = { name: qs[typ], fehler: e.message || String(e) }; }
       }));
       if (Object.keys(blaetter).length && K.X) {
         const zuo = K.X.zuordnungVorschlagen(blaetter, (this.S.einst || {}).importZuordnung);
@@ -109,15 +125,22 @@
     },
     /* ---------- Artikelstamm (APplus-Tabelle ARTIKEL, Feld ARTIKEL) ---------- */
     artikel: new Map(), artikelQuelle: null,
+    /** Bildadressen neu bilden, z. B. nach Änderung der Adresse vor dem Bildpfad */
+    /** APplus legt Dokumente unter <App>/DocLib/ ab, z. B. https://erp/APplusProd/DocLib/WK3/WK367.png */
+    bildBasisStandard() { if (location.protocol === "file:") return ""; const app = location.pathname.split("/").slice(0, 2).join("/"); return app ? app + "/DocLib/" : ""; },
+    bilderNeu() { if (!this.bildAus) return; for (const a of this.artikel.values()) a.bild = this.bildAus(a.bildRoh); },
     artikelSetzen(rows, quelle) {
+      // Bildspalte: Adresse oder HTML wie <img src="…">; Backslashes im Pfad werden zu /
+      const bildAus = this.bildAus = v => { let t = String(v || "").trim(); if (!t) return ""; const m = t.match(/src\s*=\s*["']([^"']+)["']/i); if (m) t = m[1]; t = t.replace(/\\/g, "/"); const basis = String((this.S && this.S.einst && this.S.einst.bildBasis) || (K.cfg && K.cfg.bildBasis) || this.bildBasisStandard()).trim(); if (basis && !/^([a-z]+:|\/\/|\/)/i.test(t)) t = (basis.endsWith("/") ? basis : basis + "/") + t.replace(/^\.?\//, ""); return t; };
       const sp = (K.cfg && K.cfg.artikelSpalten) || {}, map = new Map();
       const norm = s => String(s).toUpperCase().replace(/[^A-Z0-9]/g, "");
-      for (const r of rows || []) {
-        const n = {}; for (const [k, v] of Object.entries(r)) n[norm(k)] = v;
+      for (const r of Array.isArray(rows) ? rows : []) {
+        if (!r || typeof r !== "object") continue; const n = {}; for (const [k, v] of Object.entries(r)) n[norm(k)] = v;
         const f = (key, fallback) => { for (const c of (sp[key] || []).concat(fallback || [])) { const v = n[norm(c)]; if (v != null && String(v).trim() !== "") return v; } return ""; };
         const code = String(f("code", ["code", "artikel"])).trim(); if (!code) continue;
-        const zahl = v => typeof v === "number" ? v : (K.X ? K.X.zahl(v) : parseFloat(String(v).replace(",", ".")) || 0);
-        map.set(code.toUpperCase(), { code, name: String(f("name", ["name"])).trim(), preis: zahl(f("preis", ["preis"])), kosten: zahl(f("kosten", ["kosten"])), me: String(f("me", ["me"])).trim(), gruppe: String(f("gruppe", ["gruppe"])).trim() });
+        // Leere oder fehlende Spalte = kein Wert (null), damit z. B. eine Abfrage nur mit ARTIKEL und NAME keine Preise auf 0 setzt
+        const zahl = v => v === "" || v == null ? null : typeof v === "number" ? v : (K.X ? K.X.zahl(v) : parseFloat(String(v).replace(",", ".")) || 0);
+        map.set(code.toUpperCase(), { code, name: String(f("name", ["name"])).trim(), preis: zahl(f("preis", ["preis"])), kosten: zahl(f("kosten", ["kosten"])), me: String(f("me", ["me"])).trim(), gruppe: String(f("gruppe", ["gruppe"])).trim(), bildRoh: String(f("bild", ["bild"]) || ""), bild: bildAus(f("bild", ["bild"])) });
       }
       this.artikel = map; this.artikelQuelle = map.size ? quelle : null;
     },
@@ -139,12 +162,12 @@
       if (this.artikelQuelle !== "applus") return 0; let n = 0;
       for (const mo of [this.S.live, this.S.entwurf]) {
         if (!mo) continue;
-        for (const m of mo.merkmale || []) for (const w of m.werte) {
-          if (w.apStamm === false || !w.code) continue; const a = this.artikelZu(w.code); if (!a) continue;
+        for (const m of Array.isArray(mo.merkmale) ? mo.merkmale : []) for (const w of Array.isArray(m && m.werte) ? m.werte : []) {
+          if (!w || w.apStamm === false || !w.code) continue; const a = this.artikelZu(w.code); if (!a) continue;
           if (a.name && w.name !== a.name) { w.name = a.name; n++; } if (a.preis != null && w.preis !== a.preis) { w.preis = a.preis; n++; } if (a.kosten && w.kosten !== a.kosten) w.kosten = a.kosten;
         }
-        for (const p of mo.produkte || []) {
-          if (p.apStamm === false || !p.code) continue; const a = this.artikelZu(p.code); if (!a) continue;
+        for (const p of Array.isArray(mo.produkte) ? mo.produkte : []) {
+          if (!p || p.apStamm === false || !p.code) continue; const a = this.artikelZu(p.code); if (!a) continue;
           if (a.preis && p.basispreis !== a.preis) { p.basispreis = a.preis; n++; } if (a.kosten) p.basiskosten = a.kosten;
         }
       }
@@ -165,11 +188,13 @@
     _lokalSichern() {
       if (this.modus !== "lokal") return;
       clearTimeout(this._lokalTimer);
-      this._lokalTimer = setTimeout(() => {
-        const S = this.S;
-        try { localStorage.setItem(this._schluessel(), JSON.stringify({ entwurf: S.entwurf, live: S.live, kunden: S.kunden, angebote: S.angebote, einst: S.einst, releases: S.releases, protokoll: S.protokoll, prefs: S.prefs, quelle: S.quelle })); }
-        catch (e) { console.warn("[Konfigurator] Browser-Speicher voll oder gesperrt", e); }
-      }, 400);
+      this._lokalTimer = setTimeout(() => this._lokalSchreiben(), 400);
+      if (!this._beimVerlassen) { this._beimVerlassen = true; window.addEventListener("pagehide", () => { if (this._lokalTimer) this._lokalSchreiben(); }); }
+    },
+    _lokalSchreiben() {
+      clearTimeout(this._lokalTimer); this._lokalTimer = null; const S = this.S;
+      try { localStorage.setItem(this._schluessel(), JSON.stringify({ entwurf: S.entwurf, live: S.live, kunden: S.kunden, angebote: S.angebote, einst: S.einst, releases: S.releases, protokoll: S.protokoll, prefs: S.prefs, quelle: S.quelle })); }
+      catch (e) { console.warn("[Konfigurator] Browser-Speicher voll oder gesperrt", e); }
     },
     lokalZuruecksetzen() { try { localStorage.removeItem(this._schluessel()); } catch (e) {} },
 
@@ -258,6 +283,53 @@
       this._entwurfOffen = false;
       await this.log("Freigabe", "Entwurf verworfen, Stand der Version " + this.S.live.version + " wiederhergestellt");
       this._melde("entwurf");
+    },
+    /**
+     * Fahrzeuge und Familien endgültig löschen: aus dem Entwurf UND dem freigegebenen Katalog.
+     * Eine Kopie steht im Protokoll und lässt sich dort zurückholen.
+     * auswahl = { produkte: [ids], gruppen: [ids], alles: bool }
+     */
+    async endgueltigLoeschen(auswahl, text) {
+      const S = this.S, E = K.E, modelle = [S.entwurf, S.live].filter((m, i, a) => m && a.indexOf(m) === i);
+      const snap = { produkte: [], gruppen: [], merkmale: [], regeln: [] }, hat = { p: new Set(), g: new Set(), m: new Set(), r: new Set() };
+      const merke = (art, liste, o) => { if (o && !hat[art].has(o.id)) { hat[art].add(o.id); liste.push(clone(o)); } };
+      for (const mo of modelle) {
+        const gids = new Set(auswahl.alles ? mo.gruppen.map(g => g.id) : []);
+        for (const g of auswahl.gruppen || []) { gids.add(g); let neu = true; while (neu) { neu = false; for (const x of mo.gruppen) if (x.eltern && gids.has(x.eltern) && !gids.has(x.id)) { gids.add(x.id); neu = true; } } }
+        const pids = new Set([...(auswahl.produkte || []), ...mo.produkte.filter(p => auswahl.alles || gids.has(p.gruppe)).map(p => p.id)]);
+        for (const g of mo.gruppen) if (gids.has(g.id)) merke("g", snap.gruppen, g);
+        for (const p of mo.produkte) if (pids.has(p.id)) merke("p", snap.produkte, p);
+        const zu = [...mo.produkte.filter(p => pids.has(p.id)).flatMap(p => p.merkmale || []), ...mo.gruppen.filter(g => gids.has(g.id)).flatMap(g => g.merkmale || [])];
+        for (const z of zu) merke("m", snap.merkmale, E.merkmal(mo, z.id));
+        for (const r of mo.regeln) if (auswahl.alles || (r.produkte || []).some(x => pids.has(x)) || (r.gruppen || []).some(x => gids.has(x))) merke("r", snap.regeln, r);
+        E.ausGeltungEntfernen(mo, [...gids], [...pids]);
+        mo.produkte = mo.produkte.filter(p => !pids.has(p.id)); mo.gruppen = mo.gruppen.filter(g => !gids.has(g.id));
+        if (auswahl.alles) { for (const m of mo.merkmale) merke("m", snap.merkmale, m); for (const r of mo.regeln) merke("r", snap.regeln, r); mo.merkmale = []; mo.regeln = []; }
+      }
+      clearTimeout(this._entwurfTimer); await this._entwurfSichern();
+      if (S.live && S.live !== S.entwurf) await this._set("modell/live", clone(S.live)).catch(() => {});
+      await this.log("Gelöscht", text || `${snap.produkte.length} Fahrzeuge, ${snap.gruppen.length} Familien gelöscht`, { art: "geloescht", ...snap });
+      this._melde("live"); this._melde("entwurf");
+      return snap;
+    },
+    /** Gelöschtes aus einem Protokolleintrag wieder in Entwurf und Katalog einfügen (Vorhandenes bleibt unverändert) */
+    async wiederherstellen(ts) {
+      const S = this.S, e = S.protokoll.flatMap(p => p.eintraege).find(x => x.ts === ts && x.daten && x.daten.art === "geloescht"); if (!e) return 0;
+      const d = e.daten, modelle = [S.entwurf, S.live].filter((m, i, a) => m && a.indexOf(m) === i); let n = 0;
+      for (const mo of modelle) {
+        const gIds = new Set(mo.gruppen.map(g => g.id));
+        const offen = d.gruppen.filter(g => !gIds.has(g.id));
+        while (offen.length) { const i = offen.findIndex(g => !g.eltern || gIds.has(g.eltern) || !offen.some(x => x.id === g.eltern)); const g = clone(offen.splice(i < 0 ? 0 : i, 1)[0]); if (g.eltern && !gIds.has(g.eltern) && !d.gruppen.some(x => x.id === g.eltern)) g.eltern = null; mo.gruppen.push(g); gIds.add(g.id); }
+        for (const m of d.merkmale) { const da = mo.merkmale.find(x => x.id === m.id); if (!da) mo.merkmale.push(clone(m)); else for (const w of m.werte || []) if (!da.werte.some(v => v.id === w.id)) da.werte.push(clone(w)); }
+        for (const p of d.produkte) if (!mo.produkte.some(x => x.id === p.id)) { mo.produkte.push(clone(p)); if (mo === S.entwurf) n++; }
+        for (const r of d.regeln) { const da = mo.regeln.find(x => x.id === r.id); if (!da) mo.regeln.push(clone(r)); else { for (const x of r.produkte || []) if (!(da.produkte || []).includes(x) && (da.produkte || []).length) da.produkte.push(x); } }
+      }
+      e.wiederhergestellt = Date.now(); const doc = S.protokoll.find(p => p.eintraege.includes(e)); if (doc) await this._set("protokoll/" + doc.monat, clone(doc)).catch(() => {});
+      clearTimeout(this._entwurfTimer); await this._entwurfSichern();
+      if (S.live && S.live !== S.entwurf) await this._set("modell/live", clone(S.live)).catch(() => {});
+      await this.log("Gelöscht", `Zurückgeholt: ${e.text}`);
+      this._melde("live"); this._melde("entwurf");
+      return n || d.produkte.length;
     },
     async alteVersionLaden(v) {
       // Nur der aktuelle Live-Stand ist komplett gespeichert; ältere Releases sind Protokolleinträge.
@@ -370,12 +442,12 @@
       clearTimeout(this._merkTimer);
       this._merkTimer = setTimeout(() => { const l = Object.values(this._merk); this._merk = {}; this.log(l.map(x => x.bereich), l.map(x => x.text)); }, 4000);
     },
-    async log(bereich, text) {
+    async log(bereich, text, daten) {
       const bs = [].concat(bereich), ts = [].concat(text);
       const monat = new Date().toISOString().slice(0, 7), S = this.S;
       let doc = S.protokoll.find(p => p.monat === monat);
       if (!doc) { doc = { monat, eintraege: [] }; S.protokoll.unshift(doc); }
-      ts.forEach((t, i) => doc.eintraege.push({ ts: Date.now(), von: this.uid, bereich: bs[i] || bs[0], text: t }));
+      ts.forEach((t, i) => doc.eintraege.push(Object.assign({ ts: Date.now() + i, von: this.uid, bereich: bs[i] || bs[0], text: t }, daten && i === 0 ? { daten: clone(daten) } : {})));
       if (doc.eintraege.length > 800) doc.eintraege = doc.eintraege.slice(-800);
       this._melde("protokoll");
       await this._set("protokoll/" + monat, clone(doc)).catch(() => {});
